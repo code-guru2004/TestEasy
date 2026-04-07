@@ -400,7 +400,7 @@ export default function AdminTestsPage() {
                         </button>
                         
                         <button
-                          onClick={() => router.push(`/admin/tests/${test._id}`)}
+                          onClick={() => router.push(`/admin/tests/${test._id}/edit`)}
                           className="px-4 py-2 text-blue-600 dark:text-blue-400 border border-blue-300 dark:border-blue-700 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition flex items-center gap-2"
                         >
                           <Edit size={16} />

@@ -13,7 +13,9 @@ import {
   BookOpen,
   Tag,
   BarChart3,
-  Award
+  Award,
+  Lightbulb,
+  Info
 } from "lucide-react";
 
 export default function CreateQuestionPage() {
@@ -25,6 +27,7 @@ export default function CreateQuestionPage() {
     subject: "",
     topic: "",
     difficulty: "easy",
+    fact: "",
     marks: 1,
     negativeMarks: 0
   });
@@ -133,6 +136,7 @@ export default function CreateQuestionPage() {
           subject: "",
           topic: "",
           difficulty: "easy",
+          fact: "",
           marks: 1,
           negativeMarks: 0
         });
@@ -347,6 +351,37 @@ export default function CreateQuestionPage() {
             </div>
           </div>
 
+          {/* Fact Section */}
+          <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+            <div className="flex items-center space-x-2 mb-4">
+              <Lightbulb className="w-5 h-5 text-purple-500" />
+              <h2 className="text-lg font-semibold text-gray-800 dark:text-white">Educational Fact</h2>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Interesting Fact (Optional)
+              </label>
+              <div className="relative">
+                <textarea
+                  name="fact"
+                  placeholder="Add an interesting fact related to this question... This will be shown to students after answering the question."
+                  value={form.fact}
+                  onChange={handleChange}
+                  rows="3"
+                  className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-gray-50 dark:bg-gray-700 dark:text-white resize-none"
+                />
+                <div className="absolute bottom-3 right-3 text-gray-400 text-xs">
+                  <Info size={14} />
+                </div>
+              </div>
+              <p className="text-gray-500 text-xs mt-2 flex items-center gap-1">
+                <Lightbulb size={12} />
+                A fun fact or educational insight that will enhance learning experience
+              </p>
+            </div>
+          </div>
+
           {/* Scoring Section */}
           <div className="p-6 border-b border-gray-200 dark:border-gray-700">
             <div className="flex items-center space-x-2 mb-4">
@@ -449,6 +484,20 @@ export default function CreateQuestionPage() {
                   </div>
                 ))}
               </div>
+              
+              {/* Fact Preview */}
+              {form.fact && (
+                <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+                  <div className="flex items-start gap-2 p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
+                    <Lightbulb size={16} className="text-purple-500 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <p className="text-xs font-semibold text-purple-600 dark:text-purple-400 mb-1">Did You Know?</p>
+                      <p className="text-sm text-gray-700 dark:text-gray-300">{form.fact}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
               <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700 flex gap-4 text-sm">
                 <span className="text-purple-600 dark:text-purple-400">
                   📝 {form.marks} mark{form.marks !== 1 ? 's' : ''}

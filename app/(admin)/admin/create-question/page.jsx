@@ -43,7 +43,7 @@ export default function CreateQuestionPage() {
   const [formData, setFormData] = useState({
     questionText: "",
     questionImage: "",
-    options: ["", ""],
+    options: ["", "", "",""],
     correctAnswer: "",
     subject: "",
     topic: "",

@@ -1,20 +1,21 @@
 // app/page.js
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useDispatch, useSelector } from "react-redux";
+import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Mail, Lock, User, ArrowRight, LogIn } from "lucide-react";
 import { FaPhone } from "react-icons/fa6";
-import { useRouter } from "next/navigation";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000/api";
+import { loginUser, registerUser, clearError } from "../../../lib/redux/slices/authSlice";
 
 export default function AuthPage() {
+  const dispatch = useDispatch();
   const router = useRouter();
+  const { loading, error, token } = useSelector((state) => state.auth);
+
   const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [apiError, setApiError] = useState("");
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -24,30 +25,47 @@ export default function AuthPage() {
   });
   const [errors, setErrors] = useState({});
 
+  // Redirect if already logged in
+  useEffect(() => {
+    if (token) {
+
+      router.push("/dashboard");
+    }
+  }, [token, router]);
+
+  // Clear errors when switching modes
+  useEffect(() => {
+    dispatch(clearError());
+    setErrors({});
+  }, [isLogin, dispatch]);
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
     if (errors[name]) {
       setErrors((prev) => ({ ...prev, [name]: "" }));
     }
-    setApiError("");
   };
 
   const validateForm = () => {
     const newErrors = {};
+    
     if (!isLogin && !formData.name.trim()) {
       newErrors.name = "Name is required";
     }
+    
     if (!formData.email.trim()) {
       newErrors.email = "Email is required";
     } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
       newErrors.email = "Email is invalid";
     }
+    
     if (!formData.password) {
       newErrors.password = "Password is required";
     } else if (formData.password.length < 6) {
       newErrors.password = "Password must be at least 6 characters";
     }
+    
     if (!isLogin && formData.password !== formData.confirmPassword) {
       newErrors.confirmPassword = "Passwords do not match";
     }
@@ -62,64 +80,6 @@ export default function AuthPage() {
     return Object.keys(newErrors).length === 0;
   };
 
-  // Login API call
-  const handleLogin = async (email, password) => {
-    try {
-      const response = await fetch(`${API_URL}/auth/login`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ email, password }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || "Login failed");
-      }
-
-      // Store token and user data
-      if (data.token) {
-        localStorage.setItem("token", data.token);
-        localStorage.setItem("user", JSON.stringify(data.user));
-      }
-
-      return { success: true, data };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  };
-
-  // Register API call
-  const handleRegister = async (userData) => {
-    try {
-      const response = await fetch(`${API_URL}/auth/register`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(userData),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || "Registration failed");
-      }
-
-      // Store token and user data if returned
-      if (data.token) {
-        localStorage.setItem("token", data.token);
-        localStorage.setItem("user", JSON.stringify(data.user));
-      }
-
-      return { success: true, data };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     
@@ -127,34 +87,33 @@ export default function AuthPage() {
       return;
     }
 
-    setIsLoading(true);
-    setApiError("");
-
-    let result;
-    
     if (isLogin) {
       // Login
-      result = await handleLogin(formData.email, formData.password);
+      const loginData = {
+        email: formData.email,
+        password: formData.password
+      };
+      const result = await dispatch(loginUser(loginData));
+      if (loginUser.fulfilled.match(result)) {
+        console.log("Login successful, navigating to dashboard...");
+        router.push("/dashboard");
+      }
     } else {
       // Register
       const { confirmPassword, ...registerData } = formData;
-      result = await handleRegister(registerData);
-    }
-
-    setIsLoading(false);
-
-    if (result.success) {
-      // Success - redirect to dashboard or home page
-      console.log(isLogin ? "Login successful:" : "Registration successful:", result.data);
-      
-      // You can redirect to a dashboard page
-      router.push("/dashboard");
-      // Or show success message and stay on page
-      // setApiError(""); // Clear any errors
-      // You might want to show a success toast notification here
-    } else {
-      // Error
-      setApiError(result.error);
+      const result = await dispatch(registerUser(registerData));
+      if (registerUser.fulfilled.match(result)) {
+        // Switch to login mode after successful registration
+        setIsLogin(true);
+        setFormData({
+          name: "",
+          email: "",
+          password: "",
+          confirmPassword: "",
+          mobile: ""
+        });
+        // You can also show a success message here
+      }
     }
   };
 
@@ -184,9 +143,18 @@ export default function AuthPage() {
           </div>
 
           {/* API Error Message */}
-          {apiError && (
+          {error && (
             <div className="mx-6 mt-4 p-3 bg-red-500/20 border border-red-500/50 rounded-xl">
-              <p className="text-red-300 text-sm text-center">{apiError}</p>
+              <p className="text-red-300 text-sm text-center">{error}</p>
+            </div>
+          )}
+
+          {/* Success Message for Registration */}
+          {!isLogin && !error && (
+            <div className="mx-6 mt-4 p-3 bg-green-500/20 border border-green-500/50 rounded-xl">
+              <p className="text-green-300 text-sm text-center">
+                Registration successful! Please login.
+              </p>
             </div>
           )}
 
@@ -202,7 +170,7 @@ export default function AuthPage() {
                     value={formData.name}
                     onChange={handleChange}
                     placeholder="Full Name"
-                    disabled={isLoading}
+                    disabled={loading}
                     className={`w-full pl-10 pr-4 py-3 bg-white/5 border rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
                       errors.name
                         ? "border-red-500 focus:ring-red-500"
@@ -226,7 +194,7 @@ export default function AuthPage() {
                     value={formData.mobile}
                     onChange={handleChange}
                     placeholder="Mobile Number"
-                    disabled={isLoading}
+                    disabled={loading}
                     className={`w-full pl-10 pr-4 py-3 bg-white/5 border rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
                       errors.mobile
                         ? "border-red-500 focus:ring-red-500"
@@ -249,7 +217,7 @@ export default function AuthPage() {
                   value={formData.email}
                   onChange={handleChange}
                   placeholder="Email Address"
-                  disabled={isLoading}
+                  disabled={loading}
                   className={`w-full pl-10 pr-4 py-3 bg-white/5 border rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
                     errors.email
                       ? "border-red-500 focus:ring-red-500"
@@ -271,7 +239,7 @@ export default function AuthPage() {
                   value={formData.password}
                   onChange={handleChange}
                   placeholder="Password"
-                  disabled={isLoading}
+                  disabled={loading}
                   className={`w-full pl-10 pr-12 py-3 bg-white/5 border rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
                     errors.password
                       ? "border-red-500 focus:ring-red-500"
@@ -281,7 +249,7 @@ export default function AuthPage() {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  disabled={isLoading}
+                  disabled={loading}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition disabled:opacity-50"
                 >
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -302,7 +270,7 @@ export default function AuthPage() {
                     value={formData.confirmPassword}
                     onChange={handleChange}
                     placeholder="Confirm Password"
-                    disabled={isLoading}
+                    disabled={loading}
                     className={`w-full pl-10 pr-12 py-3 bg-white/5 border rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
                       errors.confirmPassword
                         ? "border-red-500 focus:ring-red-500"
@@ -312,7 +280,7 @@ export default function AuthPage() {
                   <button
                     type="button"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    disabled={isLoading}
+                    disabled={loading}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition disabled:opacity-50"
                   >
                     {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -328,7 +296,7 @@ export default function AuthPage() {
               <div className="text-right">
                 <button
                   type="button"
-                  disabled={isLoading}
+                  disabled={loading}
                   className="text-sm text-purple-300 hover:text-purple-200 transition disabled:opacity-50"
                 >
                   Forgot Password?
@@ -338,10 +306,10 @@ export default function AuthPage() {
 
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={loading}
               className="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-semibold py-3 rounded-xl transition-all duration-300 transform hover:scale-[1.02] flex items-center justify-center gap-2 group disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
             >
-              {isLoading ? (
+              {loading ? (
                 <>
                   <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -367,7 +335,6 @@ export default function AuthPage() {
                 onClick={() => {
                   setIsLogin(!isLogin);
                   setErrors({});
-                  setApiError("");
                   setFormData({
                     name: "",
                     email: "",
@@ -376,7 +343,7 @@ export default function AuthPage() {
                     mobile: "",
                   });
                 }}
-                disabled={isLoading}
+                disabled={loading}
                 className="text-purple-400 hover:text-purple-300 font-semibold transition disabled:opacity-50"
               >
                 {isLogin ? "Sign Up" : "Sign In"}

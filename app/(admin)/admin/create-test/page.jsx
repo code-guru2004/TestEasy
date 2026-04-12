@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSelector } from "react-redux";
 import axios from "axios";
@@ -28,14 +28,11 @@ import {
   BookOpen,
   FolderTree,
   Layers,
-  Plus,
-  Trash2,
-  Search,
-  Filter,
-  FileQuestion
+  Target,
+  HelpCircle
 } from "lucide-react";
 
-export default function CreateTestPage() {
+export default function CreateTestForm() {
   const router = useRouter();
   const { token } = useSelector((state) => state.auth);
   
@@ -53,58 +50,24 @@ export default function CreateTestPage() {
     testType: "full", // topic, subject, full
     subject: "",
     topic: "",
-    subjects: [],
-    questions: []
+    subjects: []
   });
 
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [showQuestionSelector, setShowQuestionSelector] = useState(false);
   const [errors, setErrors] = useState({});
   
   // Data from API
   const [subjects, setSubjects] = useState([]);
   const [topics, setTopics] = useState([]);
   const [filteredTopics, setFilteredTopics] = useState([]);
-  const [availableQuestions, setAvailableQuestions] = useState([]);
-  const [selectedQuestions, setSelectedQuestions] = useState([]);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [selectedSubjectFilter, setSelectedSubjectFilter] = useState("");
-  const [selectedTopicFilter, setSelectedTopicFilter] = useState("");
-  
-  // Pagination for questions
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalQuestions, setTotalQuestions] = useState(0);
+  const [subjectsLoading, setSubjectsLoading] = useState(false);
 
   // Fetch subjects on mount
-  useEffect(() => {
-    fetchSubjects();
-    fetchTopics();
-    fetchQuestions();
-  }, []);
-
-  // Filter topics when subject changes in form
-  useEffect(() => {
-    if (form.subject) {
-      const filtered = topics.filter(topic => topic.subject?._id === form.subject || topic.subject === form.subject);
-      setFilteredTopics(filtered);
-      if (form.topic && !filtered.find(t => t._id === form.topic)) {
-        setForm(prev => ({ ...prev, topic: "" }));
-      }
-    } else {
-      setFilteredTopics([]);
-    }
-  }, [form.subject, topics]);
-
-  // Fetch questions with filters
-  useEffect(() => {
-    fetchQuestions();
-  }, [currentPage, searchTerm, selectedSubjectFilter, selectedTopicFilter]);
-
   const fetchSubjects = async () => {
+    setSubjectsLoading(true);
     try {
       const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/subjects/search`, {
         headers: { Authorization: `Bearer ${token}` }
@@ -112,9 +75,10 @@ export default function CreateTestPage() {
       setSubjects(response.data.data || []);
     } catch (error) {
       console.error("Error fetching subjects:", error);
+    } finally {
+      setSubjectsLoading(false);
     }
   };
-
   const fetchTopics = async () => {
     try {
       const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/topics/search`, {
@@ -125,22 +89,25 @@ export default function CreateTestPage() {
       console.error("Error fetching topics:", error);
     }
   };
+  useState(() => {
+    fetchSubjects();
+    fetchTopics();
+  }, []);
 
-  const fetchQuestions = async () => {
-    try {
-      let url = `${process.env.NEXT_PUBLIC_API_URL}/api/admin/questions?page=${currentPage}&limit=10`;
-      if (searchTerm) url += `&search=${searchTerm}`;
-      if (selectedSubjectFilter) url += `&subject=${selectedSubjectFilter}`;
-      if (selectedTopicFilter) url += `&topic=${selectedTopicFilter}`;
-      
-      const response = await axios.get(url, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setAvailableQuestions(response.data.questions || []);
-      setTotalPages(response.data.pages || 1);
-      setTotalQuestions(response.data.total || 0);
-    } catch (error) {
-      console.error("Error fetching questions:", error);
+
+
+
+
+  // Filter topics when subject changes
+  const updateFilteredTopics = (subjectId) => {
+    if (subjectId) {
+      const filtered = topics.filter(topic => topic.subject?._id === subjectId || topic.subject === subjectId);
+      setFilteredTopics(filtered);
+      if (form.topic && !filtered.find(t => t._id === form.topic)) {
+        setForm(prev => ({ ...prev, topic: "" }));
+      }
+    } else {
+      setFilteredTopics([]);
     }
   };
 
@@ -152,41 +119,25 @@ export default function CreateTestPage() {
       [name]: type === "checkbox" ? checked : value,
     });
     
+    if (name === "subject") {
+      updateFilteredTopics(value);
+    }
+    
     if (errors[name]) {
       setErrors({ ...errors, [name]: "" });
     }
   };
 
   const handleTestTypeChange = (type) => {
-    setForm(prev => ({ ...prev, testType: type }));
-  };
-
-  const toggleQuestionSelection = (question) => {
-    const isSelected = selectedQuestions.find(q => q._id === question._id);
-    if (isSelected) {
-      setSelectedQuestions(selectedQuestions.filter(q => q._id !== question._id));
-    } else {
-      setSelectedQuestions([...selectedQuestions, question]);
-    }
-  };
-
-  const addSelectedQuestionsToTest = () => {
-    const questionIds = selectedQuestions.map(q => q._id);
-    setForm(prev => ({
-      ...prev,
-      questions: [...prev.questions, ...questionIds]
+    setForm(prev => ({ 
+      ...prev, 
+      testType: type,
+      // Reset subject/topic related fields when changing test type
+      subject: "",
+      topic: "",
+      subjects: []
     }));
-    setShowQuestionSelector(false);
-    setMessageType("success");
-    setMessage(`✅ Added ${selectedQuestions.length} questions to test`);
-    setTimeout(() => setMessage(""), 3000);
-  };
-
-  const removeQuestionFromTest = (questionId) => {
-    setForm(prev => ({
-      ...prev,
-      questions: prev.questions.filter(id => id !== questionId)
-    }));
+    setErrors({});
   };
 
   const validateForm = () => {
@@ -220,16 +171,16 @@ export default function CreateTestPage() {
       newErrors.topic = "Please select a topic for topic-based test";
     }
     
+    if (form.testType === "topic" && !form.subject) {
+      newErrors.subject = "Please select a subject for topic-based test";
+    }
+    
     if (form.testType === "subject" && !form.subject) {
       newErrors.subject = "Please select a subject for subject-based test";
     }
     
     if (form.testType === "full" && form.subjects.length === 0) {
       newErrors.subjects = "Please select at least one subject for full test";
-    }
-    
-    if (form.questions.length === 0) {
-      newErrors.questions = "Please add at least one question to the test";
     }
     
     setErrors(newErrors);
@@ -260,7 +211,7 @@ export default function CreateTestPage() {
         showResultImmediately: form.showResultImmediately,
         isPublished: form.isPublished,
         testType: form.testType,
-        questions: form.questions
+        questions: [] // Empty questions array - will add later
       };
 
       // Add conditional fields based on test type
@@ -273,7 +224,7 @@ export default function CreateTestPage() {
         payload.subjects = form.subjects;
       }
 
-      const res = await axios.post(
+      const response = await axios.post(
         `${process.env.NEXT_PUBLIC_API_URL}/api/admin/tests`,
         payload,
         {
@@ -282,10 +233,15 @@ export default function CreateTestPage() {
       );
 
       setMessageType("success");
-      setMessage("✅ Test created successfully!");
+      setMessage("✅ Test created successfully! You can now add questions to this test.");
       
+      // Redirect to test details page to add questions
       setTimeout(() => {
-        router.push("/dashboard/admin/tests");
+        if (response.data.test?._id) {
+          router.push(`/dashboard/admin/tests/${response.data.test._id}/edit`);
+        } else {
+          router.push("/dashboard/admin/tests");
+        }
       }, 2000);
       
     } catch (err) {
@@ -296,19 +252,17 @@ export default function CreateTestPage() {
     setLoading(false);
   };
 
-  const getSubjectName = (subjectId) => {
-    const subject = subjects.find(s => s._id === subjectId);
-    return subject?.name || "Unknown";
-  };
-
-  const getTopicName = (topicId) => {
-    const topic = topics.find(t => t._id === topicId);
-    return topic?.name || "Unknown";
+  const handleSubjectToggle = (subjectId) => {
+    if (form.subjects.includes(subjectId)) {
+      setForm(prev => ({ ...prev, subjects: prev.subjects.filter(id => id !== subjectId) }));
+    } else {
+      setForm(prev => ({ ...prev, subjects: [...prev.subjects, subjectId] }));
+    }
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 py-8">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="mb-8">
           <button
@@ -332,13 +286,29 @@ export default function CreateTestPage() {
                 </h1>
               </div>
               <p className="text-gray-600 dark:text-gray-400 ml-12">
-                Set up a comprehensive assessment with detailed configuration
+                Set up test details first, then add questions later
               </p>
             </div>
             <div className="bg-gradient-to-r from-green-500 to-emerald-500 px-4 py-2 rounded-lg shadow-sm">
               <p className="text-white text-sm font-medium flex items-center space-x-2">
                 <Shield size={16} />
-                <span>Admin Action</span>
+                <span>Step 1 of 2</span>
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Info Banner */}
+        <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-200 dark:border-blue-800">
+          <div className="flex items-start space-x-3">
+            <HelpCircle className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-blue-900 dark:text-blue-300">
+                Create Test Structure First
+              </p>
+              <p className="text-xs text-blue-700 dark:text-blue-400 mt-1">
+                Fill in the basic test details here. After creation, you'll be able to add questions 
+                from your question bank to complete the test setup.
               </p>
             </div>
           </div>
@@ -406,7 +376,7 @@ export default function CreateTestPage() {
                 </label>
                 <textarea
                   name="description"
-                  placeholder="Describe what this test covers, learning objectives, target audience..."
+                  placeholder="Describe what this test covers, learning objectives..."
                   value={form.description}
                   onChange={handleChange}
                   rows="3"
@@ -452,6 +422,9 @@ export default function CreateTestPage() {
                     min="1"
                     className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-gray-50 dark:bg-gray-700 dark:text-white"
                   />
+                  {errors.maxAttempts && (
+                    <p className="text-red-500 text-xs mt-1">{errors.maxAttempts}</p>
+                  )}
                 </div>
               </div>
             </div>
@@ -467,7 +440,7 @@ export default function CreateTestPage() {
             </div>
             
             <div className="p-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                 <button
                   type="button"
                   onClick={() => handleTestTypeChange("topic")}
@@ -513,7 +486,7 @@ export default function CreateTestPage() {
 
               {/* Dynamic Fields based on Test Type */}
               {form.testType === "topic" && (
-                <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                       Subject <span className="text-red-500">*</span>
@@ -553,7 +526,7 @@ export default function CreateTestPage() {
               )}
 
               {form.testType === "subject" && (
-                <div className="mt-6">
+                <div className="mt-4">
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Subject <span className="text-red-500">*</span>
                   </label>
@@ -573,7 +546,7 @@ export default function CreateTestPage() {
               )}
 
               {form.testType === "full" && (
-                <div className="mt-6">
+                <div className="mt-4">
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Subjects to Include <span className="text-red-500">*</span>
                   </label>
@@ -582,15 +555,8 @@ export default function CreateTestPage() {
                       <label key={subject._id} className="flex items-center space-x-3 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition">
                         <input
                           type="checkbox"
-                          value={subject._id}
                           checked={form.subjects.includes(subject._id)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setForm(prev => ({ ...prev, subjects: [...prev.subjects, subject._id] }));
-                            } else {
-                              setForm(prev => ({ ...prev, subjects: prev.subjects.filter(id => id !== subject._id) }));
-                            }
-                          }}
+                          onChange={() => handleSubjectToggle(subject._id)}
                           className="w-4 h-4 text-purple-600 rounded focus:ring-purple-500"
                         />
                         <span className="text-gray-700 dark:text-gray-300">{subject.name}</span>
@@ -646,66 +612,6 @@ export default function CreateTestPage() {
                   {errors.endTime && <p className="text-red-500 text-xs mt-1">{errors.endTime}</p>}
                 </div>
               </div>
-            </div>
-          </div>
-
-          {/* Questions Selection */}
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <FileQuestion className="w-5 h-5 text-purple-500" />
-                  <h2 className="text-lg font-semibold text-gray-800 dark:text-white">Test Questions</h2>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowQuestionSelector(true)}
-                  className="flex items-center space-x-2 px-4 py-2 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-lg hover:bg-purple-200 transition"
-                >
-                  <Plus size={16} />
-                  <span>Add Questions</span>
-                </button>
-              </div>
-            </div>
-            
-            <div className="p-6">
-              {form.questions.length === 0 ? (
-                <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                  <FileQuestion className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                  <p>No questions added yet</p>
-                  <p className="text-sm">Click "Add Questions" to select questions for this test</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {form.questions.map((questionId, index) => {
-                    const question = availableQuestions.find(q => q._id === questionId);
-                    if (!question) return null;
-                    return (
-                      <div key={questionId} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                        <div className="flex-1">
-                          <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Q{index + 1}.</span>
-                          <span className="ml-2 text-gray-800 dark:text-white">{question.questionText}</span>
-                          <div className="mt-1 flex items-center space-x-3 text-xs">
-                            <span className="text-gray-500">{getSubjectName(question.subject)}</span>
-                            <span className="text-gray-400">•</span>
-                            <span className="text-gray-500">{getTopicName(question.topic)}</span>
-                            <span className="text-gray-400">•</span>
-                            <span className="text-blue-600">{question.marks} marks</span>
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => removeQuestionFromTest(questionId)}
-                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
-                        >
-                          <Trash2 size={18} />
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-              {errors.questions && <p className="text-red-500 text-xs mt-2">{errors.questions}</p>}
             </div>
           </div>
 
@@ -786,6 +692,24 @@ export default function CreateTestPage() {
             )}
           </div>
 
+          {/* Summary Card */}
+          <div className="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 rounded-2xl p-6 border border-purple-200 dark:border-purple-800">
+            <div className="flex items-start space-x-3">
+              <Target className="w-5 h-5 text-purple-600 dark:text-purple-400 mt-0.5" />
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">
+                  Next Steps After Creation
+                </h3>
+                <ul className="text-xs text-gray-700 dark:text-gray-300 space-y-1">
+                  <li>• You'll be redirected to add questions to this test</li>
+                  <li>• Select questions from your question bank</li>
+                  <li>• Set question order or shuffle if enabled</li>
+                  <li>• Review and publish the test</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
           {/* Action Buttons */}
           <div className="flex gap-4">
             <button
@@ -809,130 +733,13 @@ export default function CreateTestPage() {
               ) : (
                 <>
                   <Save size={18} />
-                  <span>Create Test</span>
+                  <span>Create Test & Continue</span>
                 </>
               )}
             </button>
           </div>
         </form>
       </div>
-
-      {/* Question Selector Modal */}
-      {showQuestionSelector && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl max-w-4xl w-full max-h-[80vh] overflow-hidden shadow-2xl">
-            <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
-              <div>
-                <h2 className="text-xl font-bold text-gray-800 dark:text-white">Select Questions</h2>
-                <p className="text-sm text-gray-500 mt-1">Choose questions to add to your test</p>
-              </div>
-              <button onClick={() => setShowQuestionSelector(false)} className="p-2 hover:bg-gray-100 rounded-lg transition">
-                <X size={20} />
-              </button>
-            </div>
-            
-            <div className="p-6 overflow-y-auto flex-1" style={{ maxHeight: "calc(80vh - 180px)" }}>
-              {/* Filters */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                <div className="relative">
-                  <Search size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Search questions..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-                  />
-                </div>
-                <select
-                  value={selectedSubjectFilter}
-                  onChange={(e) => setSelectedSubjectFilter(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-                >
-                  <option value="">All Subjects</option>
-                  {subjects.map(s => (
-                    <option key={s._id} value={s._id}>{s.name}</option>
-                  ))}
-                </select>
-                <select
-                  value={selectedTopicFilter}
-                  onChange={(e) => setSelectedTopicFilter(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-                >
-                  <option value="">All Topics</option>
-                  {topics.filter(t => !selectedSubjectFilter || t.subject === selectedSubjectFilter).map(t => (
-                    <option key={t._id} value={t._id}>{t.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Questions List */}
-              <div className="space-y-3">
-                {availableQuestions.map((question) => (
-                  <label key={question._id} className="flex items-start space-x-3 p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer transition">
-                    <input
-                      type="checkbox"
-                      checked={selectedQuestions.some(q => q._id === question._id)}
-                      onChange={() => toggleQuestionSelection(question)}
-                      className="mt-1 w-4 h-4 text-purple-600 rounded focus:ring-purple-500"
-                    />
-                    <div className="flex-1">
-                      <p className="text-gray-800 dark:text-white font-medium">{question.questionText}</p>
-                      <div className="mt-2 flex items-center space-x-3 text-xs">
-                        <span className="text-gray-500">{getSubjectName(question.subject)}</span>
-                        <span className="text-gray-400">•</span>
-                        <span className="text-gray-500">{getTopicName(question.topic)}</span>
-                        <span className="text-gray-400">•</span>
-                        <span className="text-blue-600">{question.marks} marks</span>
-                      </div>
-                    </div>
-                  </label>
-                ))}
-              </div>
-
-              {/* Pagination */}
-              {totalPages > 1 && (
-                <div className="flex justify-center space-x-2 mt-6">
-                  <button
-                    type="button"
-                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                    disabled={currentPage === 1}
-                    className="px-3 py-1 border rounded-lg disabled:opacity-50"
-                  >
-                    Previous
-                  </button>
-                  <span className="px-3 py-1">Page {currentPage} of {totalPages}</span>
-                  <button
-                    type="button"
-                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                    disabled={currentPage === totalPages}
-                    className="px-3 py-1 border rounded-lg disabled:opacity-50"
-                  >
-                    Next
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-3">
-              <button
-                type="button"
-                onClick={() => setShowQuestionSelector(false)}
-                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={addSelectedQuestionsToTest}
-                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition"
-              >
-                Add {selectedQuestions.length} Questions
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       <style jsx>{`
         @keyframes slide-down {

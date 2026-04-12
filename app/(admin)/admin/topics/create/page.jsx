@@ -127,7 +127,7 @@ export default function CreateTopicPage() {
         
         // Optional: Redirect after 2 seconds
         setTimeout(() => {
-          router.push("/dashboard/admin/topics");
+          router.push("/admin/topics/create");
         }, 1500);
       }, 2000);
       

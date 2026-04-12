@@ -40,14 +40,17 @@ export default function DashboardLayout({ children }) {
   useEffect(() => {
     // Get current path to set active tab
     const currentPath = window.location.pathname;
+    //console.log("Current path:", currentPath);
+    
     if (currentPath === "/dashboard") setActiveTab("home");
+    else if (currentPath === "/dashboard/subjects") setActiveTab("subjects");
     else if (currentPath === "/dashboard/tests") setActiveTab("tests");
     else if (currentPath === "/dashboard/results") setActiveTab("results");
     else if (currentPath === "/dashboard/leaderboard") setActiveTab("leaderboard");
     else if (currentPath === "/dashboard/schedule") setActiveTab("schedule");
     else if (currentPath === "/dashboard/messages") setActiveTab("messages");
     else if (currentPath === "/dashboard/settings") setActiveTab("settings");
-
+    //console.log("Active tab set to:", activeTab);
     dispatch(fetchUser()).then((res) => {
       if (res.meta.requestStatus === "rejected") {
         router.push("/");
@@ -93,11 +96,14 @@ export default function DashboardLayout({ children }) {
   const navItems = [
     { id: "home", label: "Home", icon: Home, href: "/dashboard" },
     { id: "tests", label: "My Tests", icon: ClipboardList, href: "/dashboard/tests" },
+    {id: "topic-wise-test", label: "Topic-wise Tests", icon: FileText, href: "/dashboard/topic-wise-test" },
+    { id: "subjects-wise-test", label: "Subjects", icon: Users, href: "/dashboard/subject-wise-test" },
     { id: "results", label: "Results", icon: BarChart3, href: "/dashboard/results" },
     { id: "leaderboard", label: "Leaderboard", icon: Award, href: "/dashboard/leaderboard" },
     { id: "schedule", label: "Schedule", icon: Calendar, href: "/dashboard/schedule" },
     { id: "messages", label: "Messages", icon: MessageSquare, href: "/dashboard/messages", badge: 3 },
     { id: "settings", label: "Settings", icon: Settings, href: "/dashboard/settings" },
+    { id: "Admin", label: "Admin Panel", icon: User, href: "/admin/dashboard", badge: user?.role === "admin" ? "Admin" : null },
   ];
 
   const SidebarContent = () => (

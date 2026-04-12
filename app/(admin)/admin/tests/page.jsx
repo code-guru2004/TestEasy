@@ -120,6 +120,30 @@ export default function AdminTestsPage() {
     }
   };
 
+  const makePublic = async (testId) => {
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/admin/tests/${testId}/change-state`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`
+          }
+        }
+      );
+      const data = await res.json();
+      //console.log(data.msg);
+      
+      if (res.ok) {
+        alert(data.msg);
+        fetchTests();
+      }
+    } catch (err) {
+      console.error(err);
+      alert("An error occurred");
+    }
+  };
+
   const getTestStatus = (startTime, endTime) => {
     const now = new Date();
     const start = new Date(startTime);
@@ -155,6 +179,8 @@ export default function AdminTestsPage() {
     const upcomingTests = tests.filter(test => new Date(test.startTime) > now).length;
     const endedTests = tests.filter(test => new Date(test.endTime) < now).length;
     const totalQuestions = tests.reduce((sum, test) => sum + (test.questions?.length || 0), 0);
+
+
 
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -196,6 +222,16 @@ export default function AdminTestsPage() {
       <div className="max-w-7xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-8">
+          {/* Navigate to /admin/dashboard */}
+          <div>
+            <button
+              onClick={() => router.push("/admin/dashboard")}
+              className="text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white transition flex items-center gap-1 mb-4"
+            >
+              <ChevronDown size={16} className="rotate-90" />
+              Back to Dashboard
+            </button>
+          </div>
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div className="flex items-center space-x-3">
               <div className="bg-gradient-to-r from-purple-500 to-pink-500 p-2 rounded-lg">
@@ -390,14 +426,36 @@ export default function AdminTestsPage() {
 
                       {/* Actions */}
                       <div className="flex gap-2">
-                        <button
+                        {/* <button
                           onClick={() => router.push(`/admin/tests/${test._id}/questions`)}
                           className="px-4 py-2 text-purple-600 dark:text-purple-400 border border-purple-300 dark:border-purple-700 rounded-lg hover:bg-purple-50 dark:hover:bg-purple-900/20 transition flex items-center gap-2"
                           title="Manage Questions"
                         >
                           <BarChart3 size={16} />
-                          <span className="hidden sm:inline">Questions</span>
-                        </button>
+                          <span className="hidden sm:inline"></span>
+                          
+                        </button> */}
+                        {
+                            test.isPublished ? (
+                                <button
+                                  onClick={() => makePublic(test._id)}
+                                  className="px-4 py-2 text-orange-600 dark:text-orange-400 border border-orange-300 dark:border-orange-700 rounded-lg hover:bg-green-50 dark:hover:bg-green-900/20 transition flex items-center gap-2"
+                                  title="Make Private" 
+                                >
+                                  <MdOutlinePublicOff size={16} className="text-orange-600 dark:text-orange-400" />
+                                  <span className="hidden sm:inline">Make Private</span>
+                                </button>
+                            ): (
+                                <button
+                                  onClick={() => makePublic(test._id)}
+                                  className="px-4 py-2 text-green-600 dark:text-green-400 border border-green-300 dark:border-green-700 rounded-lg hover:bg-green-50 dark:hover:bg-green-900/20 transition flex items-center gap-2"
+                                  title="Make Public"
+                                >
+                                  <MdOutlinePublic size={16} className="text-green-600 dark:text-green-400" />
+                                  <span className="hidden sm:inline">Make public</span>
+                                </button>
+                            )
+                          }
                         
                         <button
                           onClick={() => router.push(`/admin/tests/${test._id}/edit`)}

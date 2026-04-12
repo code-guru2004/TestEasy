@@ -22,12 +22,17 @@ import {
 export default function CreateSubjectPage() {
   const router = useRouter();
   const { token } = useSelector((state) => state.auth);
-  
+
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
-    description: ""
+    description: "",
+    imageUrl: ""
   });
+  const [image, setImage] = useState(null);
+  const [uploadedUrl, setUploadedUrl] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [isImageChanged, setIsImageChanged] = useState(false);
   const [notification, setNotification] = useState({ show: false, type: "", message: "" });
 
   const showNotification = (type, message) => {
@@ -47,54 +52,88 @@ export default function CreateSubjectPage() {
       showNotification("error", "Subject name is required");
       return false;
     }
-    
+
     if (formData.name.length < 2) {
       showNotification("error", "Subject name must be at least 2 characters");
       return false;
     }
-    
+
     if (formData.name.length > 100) {
       showNotification("error", "Subject name must be less than 100 characters");
       return false;
     }
-    
+
     return true;
+  };
+
+  // hadle upload image to cloudinary and return url
+  // FILE UPLOAD
+  const handleUpload = async () => {
+    if (!image) return;
+  
+    setUploading(true);
+  
+    const uploadData = new FormData();
+    uploadData.append("file", image);
+  
+    try {
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: uploadData,
+      });
+  
+      const data = await res.json();
+  
+      if (data.url) {
+        console.log("Upload successful, URL:", data.url);
+        setUploadedUrl(data.url);
+        setFormData(prev => ({ ...prev, imageUrl: data.url }));
+        setIsImageChanged(false);
+      }
+    } catch (error) {
+      console.error("Upload error:", error);
+    } finally {
+      setUploading(false);
+    }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!validateForm()) return;
-    
+    if (image && isImageChanged) {
+      await handleUpload();
+    }
     setLoading(true);
-    
+
     try {
       const response = await axios.post(
         `${process.env.NEXT_PUBLIC_API_URL}/api/subjects/create`,
         {
           name: formData.name,
-          description: formData.description || undefined
+          description: formData.description || undefined,
+          imageUrl: uploadedUrl || undefined
         },
         {
           headers: { Authorization: `Bearer ${token}` }
         }
       );
-      
+
       showNotification("success", "Subject created successfully!");
-      
+
       setTimeout(() => {
         setFormData({
           name: "",
           description: ""
         });
         setLoading(false);
-        
+
         // Optional: Redirect after 2 seconds
         setTimeout(() => {
           router.push("/admin/subjects");
         }, 1500);
       }, 2000);
-      
+
     } catch (error) {
       console.error("Error creating subject:", error);
       showNotification(
@@ -117,7 +156,7 @@ export default function CreateSubjectPage() {
             <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
             <span>Back to Subjects</span>
           </button>
-          
+
           <div className="flex justify-between items-center flex-wrap gap-4">
             <div>
               <div className="flex items-center space-x-3 mb-2">
@@ -143,18 +182,17 @@ export default function CreateSubjectPage() {
 
         {/* Notification */}
         {notification.show && (
-          <div className={`mb-6 p-4 rounded-xl flex items-center space-x-3 animate-slide-down ${
-            notification.type === "success" 
+          <div className={`mb-6 p-4 rounded-xl flex items-center space-x-3 animate-slide-down ${notification.type === "success"
               ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800"
               : "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800"
-          }`}>
+            }`}>
             {notification.type === "success" ? (
               <CheckCircle size={20} />
             ) : (
               <AlertCircle size={20} />
             )}
             <span className="flex-1">{notification.message}</span>
-            <button 
+            <button
               onClick={() => setNotification({ show: false, type: "", message: "" })}
               className="hover:opacity-70 transition"
             >
@@ -171,7 +209,7 @@ export default function CreateSubjectPage() {
               <h2 className="text-white font-semibold text-lg">Subject Information</h2>
             </div>
           </div>
-          
+
           <form onSubmit={handleSubmit} className="p-6 space-y-6">
             {/* Subject Name */}
             <div className="space-y-2">
@@ -216,6 +254,85 @@ export default function CreateSubjectPage() {
               </p>
             </div>
 
+            {/* Subject Image */}
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                Subject Image <span className="text-gray-400 text-xs font-normal">(Optional)</span>
+              </label>
+              <div className="flex items-center space-x-4">
+                <div className="w-24 h-24 rounded-xl bg-gradient-to-r from-gray-200 to-gray-300 dark:from-gray-700 dark:to-gray-800 flex items-center justify-center overflow-hidden">
+                  {image ? (
+                    <img
+                      src={URL.createObjectURL(image)}
+                      alt="Subject"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="text-gray-400">
+                      <BookOpen size={24} />
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        setImage(e.target.files[0]);
+                        setIsImageChanged(true);
+                      }
+                    }}
+                    className="hidden"
+                    id="image-upload"
+                  />
+                  <label
+                    htmlFor="image-upload"
+                    className="inline-flex items-center space-x-2 px-4 py-2 border-2 border-gray-300 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition font-medium cursor-pointer"
+                  >
+                    <Plus size={16} />
+                    <span>{image ? "Change Image" : "Upload Image"}</span>
+                  </label>
+                  {image && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setImage(null);
+                        setUploadedUrl("");
+                        setIsImageChanged(true);
+                      }}  // ✅ properly closed here
+                      className="ml-4 px-3 py-1 border-2 border-red-300 dark:border-red-600 rounded-xl text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-700 transition font-medium"
+                    >
+                      Remove
+                    </button>
+                  )}
+
+                </div>
+              </div>
+              {/* Upload button */}
+              {image && isImageChanged && (
+                <div className="mt-3">
+                  <button
+                    type="button"
+                    onClick={handleUpload}
+                    disabled={uploading}
+                    className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-medium hover:shadow-lg transition-all hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                  >
+                    {uploading ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        <span>Uploading...</span>
+                      </>                    ) : (
+                      <>
+                        <Save size={16} />
+                        <span>Upload Image</span>
+                      </>
+                    )}
+                  </button>
+              </div>
+              )}
+            </div>
+            
             {/* Preview Card */}
             {formData.name && (
               <div className="mt-6 p-4 bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-xl border border-indigo-200 dark:border-indigo-800">
@@ -236,6 +353,11 @@ export default function CreateSubjectPage() {
                         {formData.description}
                       </p>
                     )}
+                    <p>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                        {formData.imageUrl}
+                      </span>
+                    </p>
                   </div>
                 </div>
               </div>

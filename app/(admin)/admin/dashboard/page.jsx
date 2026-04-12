@@ -34,12 +34,12 @@ export default function AdminDashboard() {
   const { user, token } = useSelector((state) => state.auth);
   
   const [stats, setStats] = useState({
+    totalUsers: 0,
     totalQuestions: 0,
     totalTests: 0,
     totalSubjects: 0,
     totalTopics: 0,
-    activeTests: 0,
-    publishedTests: 0
+    totalPublishedTests: 0
   });
   const [loading, setLoading] = useState(true);
   const [recentActivity, setRecentActivity] = useState([]);
@@ -50,40 +50,26 @@ export default function AdminDashboard() {
   }, []);
 
   const fetchDashboardStats = async () => {
-    try {
-      // Fetch all necessary data in parallel
-      const [questionsRes, testsRes, subjectsRes, topicsRes] = await Promise.all([
-        axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/questions?limit=1`, {
-          headers: { Authorization: `Bearer ${token}` }
-        }),
-        axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/tests`, {
-          headers: { Authorization: `Bearer ${token}` }
-        }),
-        axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/subjects/search`, {
-          headers: { Authorization: `Bearer ${token}` }
-        }),
-        axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/topics/search`, {
-          headers: { Authorization: `Bearer ${token}` }
-        })
-      ]);
-
-      const tests = testsRes.data.tests || [];
-      const publishedTests = tests.filter(test => test.isPublished).length;
-      const activeTests = tests.filter(test => {
-        const now = new Date();
-        const startTime = new Date(test.startTime);
-        const endTime = new Date(test.endTime);
-        return test.isPublished && startTime <= now && endTime >= now;
-      }).length;
-
-      setStats({
-        totalQuestions: questionsRes.data.total || 0,
-        totalTests: tests.length,
-        totalSubjects: subjectsRes.data.count || 0,
-        totalTopics: topicsRes.data.count || 0,
-        activeTests: activeTests,
-        publishedTests: publishedTests
+    try{
+      const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/dashboard-stats`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
       });
+      console.log("Dashboard stats response:", response.data.stats);
+      
+      if (response.data && response.data.stats) {
+        setStats({
+          totalUsers: response.data.stats.totalUsers || 0,
+          totalQuestions: response.data.stats.totalQuestions || 0,
+          totalTests: response.data.stats.totalPublishedTests || 0,
+          totalSubjects: response.data.stats.totalSubjects || 0,
+          totalTopics: response.data.stats.totalTopics || 0,
+          publishedTests: response.data.stats.totalPublishedTests || 0
+        });
+      }
+
+
     } catch (error) {
       console.error("Error fetching stats:", error);
     } finally {
@@ -231,7 +217,14 @@ export default function AdminDashboard() {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+          {/* total User */}
+          <StatCard
+            title="Total Users"
+            value={stats.totalUsers}
+            icon={Users}
+            color="from-blue-500 to-blue-600"
+          />
           <StatCard
             title="Total Questions"
             value={stats.totalQuestions}
@@ -246,16 +239,22 @@ export default function AdminDashboard() {
           />
           <StatCard
             title="Active Tests"
-            value={stats.activeTests}
+            value={stats.publishedTests}
             icon={Activity}
             color="from-green-500 to-green-600"
           />
+          {/* Total Topics */}
           <StatCard
-            title="Completion Rate"
-            value="78%"
-            icon={TrendingUp}
-            color="from-orange-500 to-orange-600"
-            change="↑ 12% from last month"
+            title="Total Subjects"
+            value={stats.totalSubjects}
+            icon={BookOpen}
+            color="from-emerald-500 to-emerald-600"
+          />
+          <StatCard
+            title="Total Topics"
+            value={stats.totalTopics}
+            icon={FolderTree}
+            color="from-amber-500 to-amber-600"
           />
         </div>
 

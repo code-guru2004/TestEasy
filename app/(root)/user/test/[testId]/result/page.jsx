@@ -179,10 +179,10 @@ export default function TestResultPage() {
           <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-2">Result Not Found</h2>
           <p className="text-gray-600 dark:text-gray-300">Unable to load test results. Please try again.</p>
           <button
-            onClick={() => router.push("/user/tests")}
+            onClick={() => router.push("/dashboard")}
             className="mt-6 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
           >
-            Back to Tests
+            Back Dashboard
           </button>
         </div>
       </div>
@@ -197,11 +197,11 @@ export default function TestResultPage() {
         {/* Header */}
         <div className="mb-8">
           <button
-            onClick={() => router.push("/user/tests")}
+            onClick={() => router.push("/dashboard")}
             className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition mb-4"
           >
             <Home size={18} />
-            Back to Tests
+            Back to Dashboard
           </button>
           
           <div className="flex items-center justify-between flex-wrap gap-4">

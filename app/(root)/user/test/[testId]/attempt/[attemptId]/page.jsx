@@ -13,14 +13,13 @@ import {
   PlayCircle,
   Moon,
   Sun,
-  CheckCircle,
-  XCircle,
-  AlertCircle,
   Menu,
   FileText
 } from "lucide-react";
+import Image from "next/image";
 
 export default function AttemptPage() {
+
   const { testId, attemptId } = useParams();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -37,6 +36,8 @@ export default function AttemptPage() {
   const [showSidebar, setShowSidebar] = useState(true);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [testTitle, setTestTitle] = useState("");
+  const [userEmail, setUserEmail] = useState("");
+  const [userId, setUserId] = useState("");
 
   // 🚨 SECURITY CHECK
   useEffect(() => {
@@ -97,11 +98,13 @@ export default function AttemptPage() {
       }
     );
     const data = await res.json();
-   // console.log(data);
+    // console.log(data);
+    setUserEmail(data.userEmail || "");
+    setUserId(data.userId || "");
     setQuestions(data.questions || []);
-    setCurrent(data.currentQuestionIndex || 0);
+    setCurrent(current || 0);
     setTimeLeft(data.remainingTime);
-    
+    setIsPaused(data.status === "paused" ? true : false);
     // Initialize marked for review
     const marked = data.questions
       .filter(q => q.isMarkedForReview)
@@ -111,7 +114,7 @@ export default function AttemptPage() {
 
   const saveAnswerToDB = async (questionId, selectedOption, isMarkedForReview, currentQuestionIndex) => {
     if (!attemptId) return;
-    
+
     setSavingAnswer(true);
     try {
       const res = await fetch(
@@ -131,7 +134,7 @@ export default function AttemptPage() {
           })
         }
       );
-      
+
       if (!res.ok) {
         const data = await res.json();
         if (data.msg === "Time is over") {
@@ -148,7 +151,7 @@ export default function AttemptPage() {
 
   const handleAnswer = async (questionId, answer) => {
     const currentQ = questions[current];
-    
+
     // Update local state
     const updatedQuestions = [...questions];
     updatedQuestions[current] = {
@@ -156,7 +159,7 @@ export default function AttemptPage() {
       selectedOption: answer
     };
     setQuestions(updatedQuestions);
-    
+
     // Save to database
     await saveAnswerToDB(questionId, answer, markedForReview.includes(questionId), current);
   };
@@ -169,7 +172,7 @@ export default function AttemptPage() {
       newMarked = [...markedForReview, questionId];
     }
     setMarkedForReview(newMarked);
-    
+
     // Save to database
     const currentQ = questions[current];
     await saveAnswerToDB(questionId, currentQ?.selectedOption || null, newMarked.includes(questionId), current);
@@ -177,7 +180,7 @@ export default function AttemptPage() {
 
   const pauseTest = async () => {
     if (!attemptId) return;
-    
+
     try {
       const res = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/api/user/attempts/${attemptId}/pausetest`,
@@ -189,10 +192,10 @@ export default function AttemptPage() {
           }
         }
       );
-      
+      //console.log(res.ok);
       if (res.ok) {
         setIsPaused(true);
-        alert("Test paused successfully!");
+        //alert("Test paused successfully!");
       }
     } catch (err) {
       console.error(err);
@@ -209,9 +212,9 @@ export default function AttemptPage() {
           }
         }
       );
-      
+
       const data = await res.json();
-      
+
       if (res.ok) {
         setTimeLeft(data.remainingTime);
         setIsPaused(false);
@@ -270,7 +273,7 @@ export default function AttemptPage() {
 
   const submitTest = async () => {
     if (!confirm("Are you sure you want to submit the test?")) return;
-    
+
     setSubmitting(true);
     try {
       const res = await fetch(
@@ -283,7 +286,7 @@ export default function AttemptPage() {
           }
         }
       );
-      
+
       const data = await res.json();
       if (res.ok) {
         router.push(`/user/test/${testId}/result?attemptId=${attemptId}`);
@@ -310,36 +313,102 @@ export default function AttemptPage() {
   };
 
   const getTimeColor = () => {
-    if (timeLeft < 300) return "text-red-600 dark:text-red-400";
-    if (timeLeft < 600) return "text-yellow-600 dark:text-yellow-400";
-    return "text-green-600 dark:text-green-400";
+    if (timeLeft < 300) return "text-red-700 animate-pulse dark:text-red-400";
+    if (timeLeft < 600) return "text-red-600  dark:text-yellow-400";
+    return "text-gray-500 dark:text-green-400";
   };
 
   const getQuestionStatus = (index) => {
     const question = questions[index];
     if (!question) return "not-visited";
-    if (question.selectedOption) return "answered";
-    if (markedForReview.includes(question._id)) return "marked";
+
+    // 🔥 PRIORITY FIX
+    if (markedForReview.includes(question._id) && question.selectedOption) {
+      return "answered-marked"; // new state
+    }
+
+    if (markedForReview.includes(question._id)) {
+      return "marked";
+    }
+
+    if (question.selectedOption) {
+      return "answered";
+    }
+
     return "not-answered";
   };
 
   const getStatusColor = (status) => {
-    switch(status) {
-      case "answered": return "bg-green-500";
-      case "marked": return "bg-purple-500";
-      case "not-answered": return "bg-red-500";
-      default: return "bg-gray-300 dark:bg-gray-600";
+    switch (status) {
+      case "answered":
+        return "bg-green-500";
+
+      case "marked":
+        return "bg-purple-400";
+
+      case "answered-marked":
+        return "bg-yellow-400"; // 🔥 special color (like real exam UI)
+
+      case "not-answered":
+        return "bg-red-400";
+
+      default:
+        return "bg-gray-300 dark:bg-gray-600";
     }
   };
 
+  const getStatusStyles = (status) => {
+    switch (status) {
+      case "answered":
+        return "bg-green-600 text-white [clip-path:polygon(0_0,100%_0,85%_100%,0%_100%)]";
+  
+      case "not-answered":
+        return "bg-red-600 text-white [clip-path:polygon(15%_0,100%_0,100%_100%,0%_100%)]";
+  
+      case "marked":
+        return "bg-purple-600 text-white rounded-full";
+  
+      case "answered-marked":
+        return "bg-purple-600 text-white rounded-full";
+  
+      default:
+        return "bg-gray-200 text-black border border-gray-400"; // Not visited
+    }
+  };
+  
   const currentQ = questions[current];
   const answeredCount = questions.filter(q => q.selectedOption).length;
   const progress = (answeredCount / questions.length) * 100;
 
+  // Generate watermark pattern
+  const generateWatermarkPattern = () => {
+    const pattern = [];
+    const rows = 20;
+    const cols = 6;
+    for (let i = 0; i < rows; i++) {
+      for (let j = 0; j < cols; j++) {
+        pattern.push(
+          <div
+            key={`${i}-${j}`}
+            className="text-gray-300 dark:text-gray-700 text-sm opacity-20 whitespace-nowrap"
+            style={{
+              transform: `rotate(-20deg)`,
+              fontSize: '14px',
+              fontWeight: 'bold'
+            }}
+          >
+            {userId}
+          </div>
+        );
+      }
+    }
+    return pattern;
+  };
+
   if (!currentQ) return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center">
       <div className="text-center">
-        <Loader2 className="w-12 h-12 text-purple-500 animate-spin mx-auto mb-4" />
+        <Loader2 className="w-12 h-12 text-blue-500 animate-spin mx-auto mb-4" />
         <p className="text-gray-600 dark:text-gray-300">Loading test...</p>
       </div>
     </div>
@@ -357,15 +426,15 @@ export default function AttemptPage() {
             >
               <Menu size={20} />
             </button>
-            <div className="bg-gradient-to-r from-purple-500 to-pink-500 p-1.5 rounded-lg">
-              <FileText className="w-5 h-5 text-white" />
+            <div className=" p-1.5 rounded-lg">
+              <Image src={"/images/exam.png"} alt="test" width={30} height={30} />
             </div>
             <div>
               <h1 className="font-semibold text-gray-800 dark:text-white">{testTitle}</h1>
               <p className="text-xs text-gray-500">Question {current + 1} of {questions.length}</p>
             </div>
           </div>
-          
+
           <div className="flex items-center gap-2 md:gap-4">
             {!isPaused && (
               <button
@@ -376,7 +445,7 @@ export default function AttemptPage() {
                 <Pause size={18} />
               </button>
             )}
-            <div className="flex items-center gap-2 bg-gray-100 dark:bg-gray-700 px-3 py-1.5 rounded-lg">
+            <div className="flex items-center gap-2 bg-blue-500/50 dark:bg-gray-700 px-3 py-1.5 rounded-lg">
               <Clock size={18} className={getTimeColor()} />
               <span className={`font-mono font-bold ${getTimeColor()}`}>
                 {formatTime(timeLeft)}
@@ -390,11 +459,11 @@ export default function AttemptPage() {
             </button>
           </div>
         </div>
-        
+
         {/* Progress Bar */}
         <div className="h-1 bg-gray-200 dark:bg-gray-700">
-          <div 
-            className="h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-300"
+          <div
+            className="h-full bg-gradient-to-r from-blue-500 to-cyan-400 transition-all duration-300"
             style={{ width: `${progress}%` }}
           />
         </div>
@@ -403,11 +472,27 @@ export default function AttemptPage() {
       {/* Main Content */}
       <div className="flex pt-16">
         {/* Question Sidebar */}
-        <div className={`fixed left-0 top-16 bottom-0 w-72 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transform transition-transform duration-300 z-30 overflow-y-auto ${
-          showSidebar ? "translate-x-0" : "-translate-x-full"
-        } md:translate-x-0`}>
-          <div className="p-4">
-            <div className="mb-4 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+        <div className={`fixed left-0 top-16 bottom-0 w-72  bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transform transition-transform duration-300 z-30 overflow-y-auto ${showSidebar ? "translate-x-0" : "-translate-x-full"
+          } md:translate-x-0`}>
+          <div className="p-4 flex-col gap-2">
+            <div className="mb-4 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg cursor-not-allowed">
+              
+              {/* Image */}
+              <div className="flex items-center justify-center gap-3 mb-3">
+                <Image src={"/images/person.jpg"} alt="img" width={100} height={100} />
+              </div>
+              <div className="flex items-center justify-center gap-2 mb-2">
+                <h3 className="text-xs font-light text-gray-700 dark:text-gray-300">
+                  User: {userEmail}
+                </h3>
+              </div>
+              <div className="flex items-center justify-center gap-2 mb-3">
+                <h3 className="text-xs font-light text-gray-700 dark:text-gray-300">
+                  Roll No: {userId}
+                </h3>
+              </div>
+              {/* Separator line */}
+              <hr className="border-gray-300 dark:border-gray-600 mb-3" />
               <div className="flex justify-between text-sm mb-2">
                 <span>Answered: {answeredCount}</span>
                 <span>Marked: {markedForReview.length}</span>
@@ -416,51 +501,95 @@ export default function AttemptPage() {
                 <span>Remaining: {questions.length - answeredCount}</span>
               </div>
             </div>
-
-            <div className="grid grid-cols-5 gap-2">
-              {questions.map((_, idx) => {
+            {/* QUestion Lists grid */}
+            <div className="grid grid-cols-7 gap-2">
+              {questions.map((q, idx) => {
                 const status = getQuestionStatus(idx);
+                const isMarked = markedForReview.includes(q?._id);
+
                 return (
                   <button
                     key={idx}
                     onClick={() => goToQuestion(idx)}
-                    className={`w-10 h-10 rounded-lg font-semibold transition-all ${
-                      current === idx
-                        ? "ring-2 ring-purple-500 scale-105"
-                        : ""
-                    } ${getStatusColor(status)} text-white hover:opacity-80`}
+                    className={`
+                        relative w-7 h-7 rounded-xs font-semibold text-sm
+                        transition-all duration-200
+                        ${current === idx ? "ring-2 ring-purple-600 scale-110" : ""}
+                        ${getStatusColor(status)}
+                        hover:scale-105 hover:shadow-md
+                        ${isMarked ? "border-0.5 border-purple-800" : ""}
+                      `}
                   >
                     {idx + 1}
+
+                    {/* 🔥 Small corner flag indicator */}
+                    {isMarked && (
+                      <span className="absolute top-0 right-0 w-2 h-2 bg-orange-500 rounded-full"></span>
+                    )}
                   </button>
                 );
               })}
             </div>
+            {/* Color Instruction */}
+            <div className="mt-5 pt-4 border-t border-gray-200 dark:border-gray-700 space-y-3 text-sm cursor-not-allowed">
 
-            <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 space-y-2">
-              <div className="flex items-center gap-2 text-sm">
-                <div className="w-3 h-3 rounded-full bg-green-500" />
-                <span className="text-gray-600 dark:text-gray-300">Answered</span>
+              <div className="flex items-center gap-3">
+                <div className="w-4 h-4 rounded bg-green-500" />
+                <span className="text-gray-700 dark:text-gray-300">Answered</span>
               </div>
-              <div className="flex items-center gap-2 text-sm">
-                <div className="w-3 h-3 rounded-full bg-purple-500" />
-                <span className="text-gray-600 dark:text-gray-300">Marked for Review</span>
+
+              <div className="flex items-center gap-3">
+                <div className="w-4 h-4 rounded bg-purple-400 border-2 border-purple-800" />
+                <span className="text-gray-700 dark:text-gray-300">Marked for Review</span>
               </div>
-              <div className="flex items-center gap-2 text-sm">
-                <div className="w-3 h-3 rounded-full bg-red-500" />
-                <span className="text-gray-600 dark:text-gray-300">Not Answered</span>
+
+              <div className="flex items-center gap-3">
+                <div className="w-4 h-4 rounded bg-yellow-400 border-2 border-purple-800" />
+                <span className="text-gray-700 dark:text-gray-300">
+                  Answered & Marked
+                </span>
               </div>
-              <div className="flex items-center gap-2 text-sm">
-                <div className="w-3 h-3 rounded-full bg-gray-300 dark:bg-gray-600" />
-                <span className="text-gray-600 dark:text-gray-300">Not Visited</span>
+
+              <div className="flex items-center gap-3">
+                <div className="w-4 h-4 rounded bg-red-500" />
+                <span className="text-gray-700 dark:text-gray-300">Not Answered</span>
               </div>
+
+              <div className="flex items-center gap-3">
+                <div className="w-4 h-4 rounded bg-gray-300 dark:bg-gray-600" />
+                <span className="text-gray-700 dark:text-gray-300">Not Visited</span>
+              </div>
+
             </div>
           </div>
         </div>
 
         {/* Question Area */}
-        <div className="flex-1 md:ml-72 p-6">
-          <div className="max-w-4xl mx-auto">
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+        <div className="flex-1 md:ml-72 p-6 relative">
+          {/* Watermark Container */}
+          <div className="absolute inset-0 pointer-events-none overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-full">
+              <div className="grid grid-cols-3 gap-8 p-8">
+                {[...Array(30)].map((_, i) => (
+                  <div
+                    key={i}
+                    className="text-gray-400 dark:text-gray-700 text-xs opacity-20 whitespace-nowrap"
+                    style={{
+                      transform: `rotate(-15deg)`,
+                      fontSize: '20px',
+                      fontWeight: 'bold',
+                      letterSpacing: '2px'
+                    }}
+                  >
+                    {userId}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="max-w-4xl mx-auto relative z-10">
+            <div className="rounded-xl dark:border-gray-700 p-6">
               {/* Question */}
               <div className="mb-6">
                 <div className="flex items-start justify-between mb-4">
@@ -469,18 +598,17 @@ export default function AttemptPage() {
                   </h2>
                   <button
                     onClick={() => toggleMarkForReview(currentQ._id)}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition ${
-                      markedForReview.includes(currentQ._id)
-                        ? "bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400"
-                        : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400"
-                    }`}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition ${markedForReview.includes(currentQ._id)
+                      ? "bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400"
+                      : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400"
+                      }`}
                   >
                     <Flag size={16} />
                     <span className="text-sm">Mark for Review</span>
                   </button>
                 </div>
-                
-                <p className="text-gray-800 dark:text-white text-lg mb-4">
+
+                <p className="text-gray-800 dark:text-white text-lg mb-4 cursor-not-allowed">
                   {currentQ?.questionText}
                 </p>
 
@@ -489,11 +617,10 @@ export default function AttemptPage() {
                   {currentQ?.options?.map((option, idx) => (
                     <label
                       key={idx}
-                      className={`flex items-center gap-3 p-4 border rounded-xl cursor-pointer transition-all hover:bg-gray-50 dark:hover:bg-gray-700 ${
-                        currentQ.selectedOption === option
-                          ? "border-purple-500 bg-purple-50 dark:bg-purple-900/20"
-                          : "border-gray-200 dark:border-gray-700"
-                      }`}
+                      className={`flex items-center gap-3 p-4 border rounded-sm cursor-pointer transition-all hover:bg-gray-50 dark:hover:bg-gray-700 ${currentQ.selectedOption === option
+                        ? "border-blue-500 bg-blue-50 dark:bg-purple-900/20"
+                        : "border-gray-300 dark:border-gray-700"
+                        }`}
                     >
                       <input
                         type="radio"
@@ -505,7 +632,7 @@ export default function AttemptPage() {
                         disabled={savingAnswer}
                       />
                       <span className="text-gray-700 dark:text-gray-300">
-                        {String.fromCharCode(65 + idx)}. {option}
+                        {option}
                       </span>
                     </label>
                   ))}
@@ -522,12 +649,12 @@ export default function AttemptPage() {
                   <ChevronLeft size={18} />
                   Previous
                 </button>
-                
+
                 {current === questions.length - 1 ? (
                   <button
                     onClick={submitTest}
                     disabled={submitting}
-                    className="px-6 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg hover:from-purple-600 hover:to-pink-600 transition flex items-center gap-2"
+                    className="px-6 py-2 bg-green-700 flex items-center gap-2 text-stone-50"
                   >
                     {submitting ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
@@ -540,14 +667,14 @@ export default function AttemptPage() {
                   <button
                     onClick={nextQuestion}
                     disabled={savingAnswer}
-                    className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition flex items-center gap-2"
+                    className="px-6 py-2 bg-blue-600 text-white rounded-sm hover:bg-blue-700 transition flex items-center gap-2"
                   >
                     Save & Next
                     <ChevronRight size={18} />
                   </button>
                 )}
               </div>
-              
+
               {savingAnswer && (
                 <div className="mt-3 flex items-center justify-center gap-2 text-sm text-gray-500">
                   <Loader2 className="w-4 h-4 animate-spin" />

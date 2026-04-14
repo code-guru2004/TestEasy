@@ -22,10 +22,14 @@ import {
   MessageSquare,
   Moon,
   Sun,
-  User
+  User,
+  CircleChevronRight,
+  MenuIcon,
+  SquareChevronRight
 } from "lucide-react";
 import { logout, fetchUser } from "@/lib/redux/slices/authSlice";
 import { MdAdminPanelSettings } from "react-icons/md";
+
 export default function DashboardLayout({ children }) {
   const { user, token, isAuthenticated } = useSelector((state) => state.auth);
   const dispatch = useDispatch();
@@ -40,17 +44,16 @@ export default function DashboardLayout({ children }) {
   useEffect(() => {
     // Get current path to set active tab
     const currentPath = window.location.pathname;
-    //console.log("Current path:", currentPath);
     
     if (currentPath === "/dashboard") setActiveTab("home");
     else if (currentPath === "/dashboard/subjects") setActiveTab("subjects");
     else if (currentPath === "/dashboard/tests") setActiveTab("tests");
-    else if (currentPath === "/dashboard/results") setActiveTab("results");
+    else if (currentPath === "/dashboard/topic-wise-test") setActiveTab("topic-wise-test");
+    else if (currentPath === "/dashboard/subject-wise-test") setActiveTab("subjects-wise-test");
+    else if (currentPath === "/dashboard/my-results") setActiveTab("results");
     else if (currentPath === "/dashboard/leaderboard") setActiveTab("leaderboard");
     else if (currentPath === "/dashboard/schedule") setActiveTab("schedule");
-    else if (currentPath === "/dashboard/messages") setActiveTab("messages");
-    else if (currentPath === "/dashboard/settings") setActiveTab("settings");
-    //console.log("Active tab set to:", activeTab);
+    
     dispatch(fetchUser()).then((res) => {
       if (res.meta.requestStatus === "rejected") {
         router.push("/");
@@ -96,36 +99,47 @@ export default function DashboardLayout({ children }) {
   const navItems = [
     { id: "home", label: "Home", icon: Home, href: "/dashboard" },
     { id: "tests", label: "My Tests", icon: ClipboardList, href: "/dashboard/tests" },
-    {id: "topic-wise-test", label: "Topic-wise Tests", icon: FileText, href: "/dashboard/topic-wise-test" },
+    { id: "topic-wise-test", label: "Topic-wise Tests", icon: FileText, href: "/dashboard/topic-wise-test" },
     { id: "subjects-wise-test", label: "Subjects", icon: Users, href: "/dashboard/subject-wise-test" },
-    { id: "results", label: "Results", icon: BarChart3, href: "/dashboard/results" },
+    { id: "results", label: "Results", icon: BarChart3, href: "/dashboard/my-results" },
     { id: "leaderboard", label: "Leaderboard", icon: Award, href: "/dashboard/leaderboard" },
     { id: "schedule", label: "Schedule", icon: Calendar, href: "/dashboard/schedule" },
-    { id: "messages", label: "Messages", icon: MessageSquare, href: "/dashboard/messages", badge: 3 },
-    { id: "settings", label: "Settings", icon: Settings, href: "/dashboard/settings" },
     { id: "Admin", label: "Admin Panel", icon: User, href: "/admin/dashboard", badge: user?.role === "admin" ? "Admin" : null },
   ];
 
   const SidebarContent = () => (
-    <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-        <div className="flex items-center space-x-3">
-          <div className="bg-gradient-to-r from-purple-500 to-pink-500 p-2 rounded-lg">
-            <FileText className="w-6 h-6 text-white" />
-          </div>
-          <span className="text-xl font-bold text-gray-800 dark:text-white">TestPortal</span>
-        </div>
+    <div className="flex flex-col h-full ">
+      <div className="flex items-center  relative justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+        {
+          isSidebarOpen ? (
+            <div className="flex items-center space-x-3 overflow-hidden">
+              <div className="bg-gradient-to-r from-purple-500 to-pink-500 p-2 rounded-lg flex-shrink-0">
+                <FileText className="w-6 h-6 text-white" />
+              </div>
+              <span className={`text-xl font-bold text-gray-800 dark:text-white whitespace-nowrap transition-all duration-300 ${
+                isSidebarOpen ? "opacity-100 translate-x-0" : "opacity-0 -translate-x-4 w-0"
+              }`}>
+                Test One
+              </span>
+            </div>
+
+          ) : (
+            <div className="bg-gradient-to-r from-purple-500 to-pink-500 p-2 rounded-lg flex-shrink-0 mx-auto">
+              <FileText className="w-6 h-6 text-white" />
+            </div>
+          )
+        }
         {typeof window !== 'undefined' && window.innerWidth >= 768 && (
           <button
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition"
+            className={`p-1 absolute ${isSidebarOpen?"left-56":"left-15 top-1"} rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-200 hover:scale-110 flex-shrink-0 `}
           >
-            {isSidebarOpen ? <ChevronLeft size={20} /> : <ChevronRight size={20} />}
+            {isSidebarOpen ? <ChevronLeft size={20} /> : <SquareChevronRight size={30} className="text-gray-400"/>}
           </button>
         )}
       </div>
 
-      <nav className="flex-1 overflow-y-auto py-6 px-4 space-y-2">
+      <nav className="flex-1  py-6 px-4 space-y-2">
         {navItems.map((item) => (
           <Link
             key={item.id}
@@ -133,104 +147,93 @@ export default function DashboardLayout({ children }) {
             onClick={() => setActiveTab(item.id)}
             className={`flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 group relative ${
               activeTab === item.id
-                ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg"
+                ? "bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg"
                 : "text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
             }`}
           >
-            <item.icon size={20} />
-            {isSidebarOpen && (
-              <>
-                <span className="font-medium">{item.label}</span>
-                {item.badge && (
-                  <span className="ml-auto bg-red-500 text-white text-xs px-2 py-1 rounded-full">
-                    {item.badge}
-                  </span>
-                )}
-              </>
+            <item.icon size={20} className="flex-shrink-0" />
+            <span className={`font-medium transition-all duration-300 ${
+              isSidebarOpen ? "opacity-100 translate-x-0 delay-100" : "opacity-0 -translate-x-4 w-0 absolute"
+            }`}>
+              {item.label}
+            </span>
+            {isSidebarOpen && item.badge && (
+              <span className={`ml-auto bg-red-500 text-white text-xs px-2 py-1 rounded-full transition-all duration-300 ${
+                isSidebarOpen ? "opacity-100 scale-100" : "opacity-0 scale-0"
+              }`}>
+                {item.badge}
+              </span>
             )}
             {!isSidebarOpen && (
-              <div className="absolute left-full ml-2 px-2 py-1 bg-gray-900 text-white text-sm rounded opacity-0 group-hover:opacity-100 transition pointer-events-none whitespace-nowrap z-50">
+              <div className="absolute left-full ml-2 px-2 py-1 bg-gray-900 text-white text-sm rounded-md opacity-0 group-hover:opacity-100 transition-all duration-200 pointer-events-none whitespace-nowrap z-50 transform group-hover:translate-x-0 -translate-x-2 shadow-lg">
                 {item.label}
-                {item.badge && <span className="ml-1 text-red-400">({item.badge})</span>}
+                {item.badge && <span className="ml-1 text-yellow-400">({item.badge})</span>}
               </div>
             )}
           </Link>
         ))}
       </nav>
-
-      <div className="border-t border-gray-200 dark:border-gray-700 p-4">
-        <div className="flex items-center space-x-3 px-4 py-3 rounded-xl bg-gray-50 dark:bg-gray-700/50">
-          <div className="w-10 h-10 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center text-white font-bold">
-            {user?.name ? user.name.charAt(0).toUpperCase() : "U"} 
-          </div>
-          {isSidebarOpen && (
-            <div className="flex-1 min-w-0">
+      {/* sidebar profile */}
+      {
+        isSidebarOpen? (
+        <div className="border-t border-gray-200 dark:border-gray-700 p-4">
+          <div className="flex items-center space-x-3 px-4 py-3 rounded-xl bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700/50 dark:to-gray-700/30 hover:shadow-lg transition-all duration-300">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center text-white font-bold shadow-md flex-shrink-0">
+              {user?.name ? user.name.charAt(0).toUpperCase() : "U"} 
+            </div>
+            <div className={`flex-1 min-w-0 transition-all duration-300 ${
+              isSidebarOpen ? "opacity-100 translate-x-0" : "opacity-0 -translate-x-4 w-0 absolute"
+            }`}
+            onClick={() => router.push("/dashboard/profile")}
+            >
               <p className="text-sm font-medium text-gray-800 dark:text-white truncate">
-                {user?.name || "User Name"} {user?.role=="admin" ? (<MdAdminPanelSettings className="inline text-yellow-400" size={16} />) : ("")} 
+                {user?.name || "User Name"} 
+                {user?.role === "admin" && <MdAdminPanelSettings className="inline text-yellow-400 ml-1" size={16} />} 
               </p>
               <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
                 {user?.email || "user@example.com"}
               </p>
             </div>
-          )}
-          <button
-            onClick={handleLogout}
-            className="p-2 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400 transition"
-            title="Logout"
-          >
-            <LogOut size={18} />
-          </button>
+            <button
+              onClick={handleLogout}
+              className="p-2 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400 transition-all duration-200 hover:scale-110 flex-shrink-0"
+              title="Logout"
+            >
+              <LogOut size={18} />
+            </button>
+          </div>
         </div>
-      </div>
-    </div>
-  );
-
-  const BottomNav = () => (
-    <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-lg z-50 md:hidden">
-      <div className="flex justify-around items-center px-4 py-2">
-        {navItems.slice(0, 5).map((item) => (
-          <Link
-            key={item.id}
-            href={item.href}
-            onClick={() => setActiveTab(item.id)}
-            className={`flex flex-col items-center space-y-1 px-3 py-2 rounded-lg transition-all relative ${
-              activeTab === item.id
-                ? "text-purple-600 dark:text-purple-400"
-                : "text-gray-500 dark:text-gray-400"
-            }`}
-          >
-            <item.icon size={22} />
-            <span className="text-xs font-medium">{item.label}</span>
-            {item.badge && (
-              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                {item.badge}
-              </span>
-            )}
-          </Link>
-        ))}
-      </div>
+        ):(
+          <div className="w-10 h-10 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center text-white font-bold shadow-md flex-shrink-0 mx-auto mb-4">
+           
+              {user?.name ? user.name.charAt(0).toUpperCase() : "U"} 
+            </div>
+        )
+      }
     </div>
   );
 
   const MobileHeader = () => (
-    <div className="md:hidden fixed top-0 left-0 right-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 z-40">
+    <div className="md:hidden fixed top-0 left-0 right-0 bg-white/95 dark:bg-gray-800/95 backdrop-blur-md border-b border-gray-200 dark:border-gray-700 z-40 animate-slideDown">
       <div className="flex items-center justify-between px-4 py-3">
         <div className="flex items-center space-x-3">
-          <div className="bg-gradient-to-r from-purple-500 to-pink-500 p-2 rounded-lg">
+          <div className="bg-gradient-to-r from-purple-500 to-pink-500 p-2 rounded-lg animate-pulse">
             <FileText className="w-5 h-5 text-white" />
           </div>
-          <span className="text-lg font-bold text-gray-800 dark:text-white">TestPortal</span>
+          <span className="text-lg font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+            TestPortal
+          </span>
         </div>
         <div className="flex items-center space-x-2">
           <button
             onClick={toggleTheme}
-            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-200 hover:scale-110"
           >
             {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
           </button>
           <button
             onClick={() => setIsMobileMenuOpen(true)}
-            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-200 hover:scale-110"
           >
             <Menu size={24} />
           </button>
@@ -242,24 +245,30 @@ export default function DashboardLayout({ children }) {
   const MobileMenuDrawer = () => (
     <>
       {isMobileMenuOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 md:hidden" onClick={() => setIsMobileMenuOpen(false)}>
-          <div className="absolute right-0 top-0 bottom-0 w-80 bg-white dark:bg-gray-800 shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700">
+        <>
+          <div 
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 md:hidden animate-fadeIn" 
+            onClick={() => setIsMobileMenuOpen(false)}
+          />
+          <div className="fixed right-0 top-0 bottom-0 w-80 bg-white dark:bg-gray-800 shadow-2xl z-50 md:hidden animate-slideInRight">
+            <div className="flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-purple-50 to-pink-50 dark:from-gray-700 dark:to-gray-800">
               <div className="flex items-center space-x-3">
-                <div className="bg-gradient-to-r from-purple-500 to-pink-500 p-2 rounded-lg">
+                <div className="bg-gradient-to-r from-purple-500 to-pink-500 p-2 rounded-lg animate-bounce">
                   <FileText className="w-5 h-5 text-white" />
                 </div>
-                <span className="text-lg font-bold text-gray-800 dark:text-white">Menu</span>
+                <span className="text-lg font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+                  Menu
+                </span>
               </div>
               <button
                 onClick={() => setIsMobileMenuOpen(false)}
-                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+                className="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-all duration-200 hover:rotate-90"
               >
                 <X size={24} />
               </button>
             </div>
-            <div className="p-4">
-              {navItems.map((item) => (
+            <div className="p-4 overflow-y-auto h-[calc(100%-140px)]">
+              {navItems.map((item, index) => (
                 <Link
                   key={item.id}
                   href={item.href}
@@ -267,42 +276,104 @@ export default function DashboardLayout({ children }) {
                     setActiveTab(item.id);
                     setIsMobileMenuOpen(false);
                   }}
-                  className="flex items-center space-x-3 px-4 py-3 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition"
+                  className={`flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-300 hover:scale-105 hover:shadow-lg mb-2 ${
+                    activeTab === item.id
+                      ? "bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg"
+                      : "hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"
+                  }`}
+                  style={{
+                    animation: `slideInFromRight 0.3s ease-out ${index * 0.05}s both`
+                  }}
                 >
-                  <item.icon size={20} />
-                  <span className="font-medium">{item.label}</span>
+                  <item.icon size={20} className="flex-shrink-0" />
+                  <span className="font-medium flex-1">{item.label}</span>
                   {item.badge && (
-                    <span className="ml-auto bg-red-500 text-white text-xs px-2 py-1 rounded-full">
+                    <span className="bg-red-500 text-white text-xs px-2 py-1 rounded-full animate-pulse">
                       {item.badge}
                     </span>
                   )}
                 </Link>
               ))}
-              <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                <button
-                  onClick={handleLogout}
-                  className="w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition"
-                >
-                  <LogOut size={20} />
-                  <span className="font-medium">Logout</span>
-                </button>
-              </div>
+            </div>
+            <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+              <button
+                onClick={handleLogout}
+                className="w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all duration-200 hover:scale-105 group"
+              >
+                <LogOut size={20} className="group-hover:rotate-12 transition-transform" />
+                <span className="font-medium">Logout</span>
+              </button>
             </div>
           </div>
-        </div>
+        </>
       )}
     </>
   );
 
   return (
     <div className={`min-h-screen bg-gray-50 dark:bg-gray-900 ${isDarkMode ? "dark" : ""}`}>
+      <style jsx global>{`
+        @keyframes slideDown {
+          from {
+            opacity: 0;
+            transform: translateY(-100%);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        
+        @keyframes slideInRight {
+          from {
+            opacity: 0;
+            transform: translateX(100%);
+          }
+          to {
+            opacity: 1;
+            transform: translateX(0);
+          }
+        }
+        
+        @keyframes slideInFromRight {
+          from {
+            opacity: 0;
+            transform: translateX(50px);
+          }
+          to {
+            opacity: 1;
+            transform: translateX(0);
+          }
+        }
+        
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+          }
+          to {
+            opacity: 1;
+          }
+        }
+        
+        .animate-slideDown {
+          animation: slideDown 0.3s ease-out;
+        }
+        
+        .animate-slideInRight {
+          animation: slideInRight 0.3s ease-out;
+        }
+        
+        .animate-fadeIn {
+          animation: fadeIn 0.2s ease-out;
+        }
+      `}</style>
+      
       <MobileHeader />
       <MobileMenuDrawer />
-      <BottomNav />
       
       <div className="flex h-screen pt-0 md:pt-0 pb-16 md:pb-0">
         <aside
-          className={`hidden md:block fixed left-0 top-0 h-full bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transition-all duration-300 z-30 ${
+          className={`hidden md:block fixed left-0 top-0 h-full bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transition-all duration-300 ease-in-out z-30 ${
             isSidebarOpen ? "w-72" : "w-20"
           }`}
         >
@@ -310,11 +381,13 @@ export default function DashboardLayout({ children }) {
         </aside>
 
         <main
-          className={`flex-1 transition-all duration-300 ${
+          className={`flex-1 transition-all duration-300 ease-in-out overflow-y-auto ${
             isSidebarOpen ? "md:ml-72" : "md:ml-20"
           }`}
         >
-          {children}
+          <div className="pt-16 md:pt-0">
+            {children}
+          </div>
         </main>
       </div>
     </div>

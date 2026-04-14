@@ -21,11 +21,20 @@ import {
   XCircle,
   ChevronDown
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+
 
 export default function SubjectWiseTestsPage() {
   const { subjectId } = useParams();
   const router = useRouter();
-  
+
   const [subject, setSubject] = useState(null);
   const [tests, setTests] = useState([]);
   const [filteredTests, setFilteredTests] = useState([]);
@@ -33,6 +42,11 @@ export default function SubjectWiseTestsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [difficultyFilter, setDifficultyFilter] = useState("all");
   const [showFilters, setShowFilters] = useState(false);
+  const [attemptsModalOpen, setAttemptsModalOpen] = useState(false);
+  const [selectedTestId, setSelectedTestId] = useState(null);
+  const [attempts, setAttempts] = useState([]);
+  const [attemptsLoading, setAttemptsLoading] = useState(false);
+
 
   useEffect(() => {
     fetchSubjectTests();
@@ -65,20 +79,42 @@ export default function SubjectWiseTestsPage() {
     }
   };
 
+  // 
+  const fetchAttempts = async (testId) => {
+    try {
+      setAttemptsLoading(true);
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/tests/${testId}/attempts`,
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`
+          }
+        }
+      );
+
+      const data = await res.json();
+      setAttempts(data.attempts || []);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setAttemptsLoading(false);
+    }
+  };
+
   const filterTests = () => {
     let filtered = [...tests];
-    
+
     if (searchTerm) {
       filtered = filtered.filter(test =>
         test.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
         test.description?.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
-    
+
     if (difficultyFilter !== "all") {
       filtered = filtered.filter(test => test.difficulty === difficultyFilter);
     }
-    
+
     setFilteredTests(filtered);
   };
 
@@ -86,14 +122,14 @@ export default function SubjectWiseTestsPage() {
     const now = new Date();
     const start = new Date(startTime);
     const end = new Date(endTime);
-    
+
     if (now < start) return { label: "Upcoming", color: "text-yellow-600 bg-yellow-50 dark:bg-yellow-900/20" };
     if (now >= start && now <= end) return { label: "Active", color: "text-green-600 bg-green-50 dark:bg-green-900/20" };
     return { label: "Expired", color: "text-gray-600 bg-gray-50 dark:bg-gray-700" };
   };
 
   const getDifficultyBadge = (difficulty) => {
-    switch(difficulty) {
+    switch (difficulty) {
       case 'easy': return { label: 'Easy', color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' };
       case 'medium': return { label: 'Medium', color: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' };
       case 'hard': return { label: 'Hard', color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' };
@@ -110,6 +146,12 @@ export default function SubjectWiseTestsPage() {
       hour: '2-digit',
       minute: '2-digit'
     });
+  };
+
+  const openAttemptsModal = (testId) => {
+    setSelectedTestId(testId);
+    setAttemptsModalOpen(true);
+    fetchAttempts(testId);
   };
 
   if (loading) {
@@ -135,7 +177,7 @@ export default function SubjectWiseTestsPage() {
             <ChevronLeft size={18} />
             Back to Subjects
           </button>
-          
+
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div className="flex items-center space-x-3">
               <div className="bg-blue-100 dark:bg-blue-900/30 p-2 rounded-lg">
@@ -150,7 +192,7 @@ export default function SubjectWiseTestsPage() {
                 </p>
               </div>
             </div>
-            
+
             <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
               <Target size={16} />
               <span>{filteredTests.length} tests available</span>
@@ -206,7 +248,7 @@ export default function SubjectWiseTestsPage() {
                   className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white"
                 />
               </div>
-              
+
               <button
                 onClick={() => setShowFilters(!showFilters)}
                 className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition flex items-center gap-2 text-gray-700 dark:text-gray-300"
@@ -263,7 +305,7 @@ export default function SubjectWiseTestsPage() {
             {filteredTests.map((test) => {
               const status = getTestStatus(test.startTime, test.endTime);
               const difficulty = getDifficultyBadge(test.difficulty);
-              
+
               return (
                 <div
                   key={test._id}
@@ -271,73 +313,119 @@ export default function SubjectWiseTestsPage() {
                 >
                   <div className="p-6">
                     <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+
+                      {/* LEFT SECTION */}
                       <div className="flex-1">
-                        {/* Title and Status */}
+
+                        {/* Title */}
                         <div className="flex items-center gap-2 mb-2 flex-wrap">
                           <h3 className="text-xl font-semibold text-gray-800 dark:text-white">
                             {test.title}
                           </h3>
-                          <span className={`text-xs px-2 py-1 rounded-full ${status.color}`}>
-                            {status.label}
-                          </span>
-                          <span className={`text-xs px-2 py-1 rounded-full ${difficulty.color}`}>
-                            {difficulty.label}
-                          </span>
+
+                          {/* STATUS BADGES */}
+                          {test.canResume && (
+                            <span className="text-xs px-2 py-1 rounded-full bg-yellow-100 text-yellow-700">
+                              In Progress
+                            </span>
+                          )}
+
+                          {!test.canResume && test.completedAttemptsCount > 0 && (
+                            <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-700">
+                              Attempted
+                            </span>
+                          )}
+
+                          {test.attemptCount === 0 && (
+                            <span className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-600">
+                              Not Attempted
+                            </span>
+                          )}
                         </div>
-                        
+
                         {/* Description */}
                         {test.description && (
                           <p className="text-gray-600 dark:text-gray-300 text-sm mb-3">
                             {test.description}
                           </p>
                         )}
-                        
-                        {/* Test Details */}
+
+                        {/* DETAILS */}
                         <div className="flex flex-wrap gap-4 text-sm text-gray-500 dark:text-gray-400">
                           <div className="flex items-center gap-1">
                             <Clock size={14} />
-                            <span>{test.duration} minutes</span>
+                            <span>{test.duration} min</span>
                           </div>
+
                           <div className="flex items-center gap-1">
                             <Target size={14} />
-                            <span>{test.questions?.length || 0} questions</span>
+                            <span>{test.totalQuestions} questions</span>
                           </div>
+
                           <div className="flex items-center gap-1">
                             <Award size={14} />
-                            <span>{test.totalMarks || 0} marks</span>
+                            <span>{test.totalMarks} marks</span>
                           </div>
+
                           <div className="flex items-center gap-1">
                             <Users size={14} />
-                            <span>Max {test.maxAttempts} attempt(s)</span>
+                            <span>
+                              {test.completedAttemptsCount}/{test.maxAttempts} attempts used
+                            </span>
                           </div>
                         </div>
-                        
-                        {/* Schedule */}
+
+                        {/* SCHEDULE */}
                         <div className="mt-3 flex flex-wrap gap-4 text-xs text-gray-500 dark:text-gray-400">
                           <div className="flex items-center gap-1">
                             <Calendar size={12} />
-                            <span>Starts: {formatDate(test.startTime)}</span>
+                            <span>Start: {formatDate(test.startTime)}</span>
                           </div>
+
                           <div className="flex items-center gap-1">
                             <Calendar size={12} />
-                            <span>Ends: {formatDate(test.endTime)}</span>
+                            <span>End: {formatDate(test.endTime)}</span>
                           </div>
                         </div>
                       </div>
-                      
-                      {/* Action Button */}
-                      <button
-                        onClick={() => router.push(`/user/test/${test._id}`)}
-                        disabled={status.label !== "Active"}
-                        className={`px-6 py-2.5 rounded-lg font-medium transition flex items-center gap-2 whitespace-nowrap ${
-                          status.label === "Active"
-                            ? "bg-blue-600 hover:bg-blue-700 text-white"
-                            : "bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed"
-                        }`}
-                      >
-                        <Play size={16} />
-                        {status.label === "Active" ? "Start Test" : status.label}
-                      </button>
+
+                      {/* RIGHT SECTION (ACTIONS) */}
+                      <div className="flex flex-col gap-2 min-w-[150px]">
+
+                        {/* RESUME */}
+                        {test.canResume && (
+                          <button
+                            onClick={() =>
+                              router.push(`/user/test/${test._id}/attempt/${test.activeAttemptId}?agreed=true`)
+                            }
+                            className="px-4 py-2 rounded-lg bg-yellow-500 hover:bg-yellow-600 text-white font-medium flex items-center justify-center gap-2"
+                          >
+                            <Play size={16} />
+                            Resume
+                          </button>
+                        )}
+
+                        {/* VIEW RESULT */}
+                        {test.canViewResult && (
+                          <button
+                            onClick={() => openAttemptsModal(test._id)} // 👈 your modal
+                            className="px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white font-medium flex items-center justify-center gap-2"
+                          >
+                            View Results
+                          </button>
+                        )}
+
+                        {/* START / RE-ATTEMPT */}
+                        {test.canStart && (
+                          <button
+                            onClick={() => router.push(`/user/test/${test._id}`)}
+                            className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium flex items-center justify-center gap-2"
+                          >
+                            <Play size={16} />
+                            {test.completedAttemptsCount > 0 ? "Re-attempt" : "Start"}
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -346,6 +434,60 @@ export default function SubjectWiseTestsPage() {
           </div>
         )}
       </div>
+      <Dialog open={attemptsModalOpen} onOpenChange={setAttemptsModalOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Attempt History</DialogTitle>
+            <DialogDescription>
+              Select an attempt to view result
+            </DialogDescription>
+          </DialogHeader>
+
+          {attemptsLoading ? (
+            <div className="flex justify-center py-6">
+              <Loader2 className="animate-spin" />
+            </div>
+          ) : attempts.length === 0 ? (
+            <p className="text-center text-gray-500 py-4">
+              No attempts found
+            </p>
+          ) : (
+            <div className="space-y-3 max-h-[400px] overflow-y-auto">
+              {attempts.map((attempt, index) => (
+                <div
+                  key={attempt._id}
+                  className="border rounded-lg p-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+                >
+                  <div>
+                    <p className="font-medium text-gray-800 dark:text-white">
+                      Attempt #{index + 1}
+                    </p>
+
+                    <p className="text-sm text-gray-500">
+                      Score: {attempt.score ?? 0}
+                    </p>
+
+                    <p className="text-xs text-gray-400">
+                      {new Date(attempt.createdAt).toLocaleString()}
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={() =>
+                      router.push(
+                        `/user/result/${attempt._id}`
+                      )
+                    }
+                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm"
+                  >
+                    View
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

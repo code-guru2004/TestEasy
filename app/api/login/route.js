@@ -15,9 +15,10 @@ console.log("Received login request with body:", body);
   // ✅ THIS is the key fix
   response.cookies.set("token", data.token, {
     httpOnly: true,
-    secure: false, // true in production
+    secure: true, // true in production (HTTPS)
     sameSite: "lax",
     path: "/",
+    maxAge: 60 * 60 * 24 * 3, // ✅ 3 days in seconds
   });
 
   return response;

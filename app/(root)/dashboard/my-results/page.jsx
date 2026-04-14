@@ -63,7 +63,7 @@ export default function ResultsPage() {
         }
       );
       const data = await res.json();
-      console.log("Fetched results:", data);
+      
       if (data.success) {
         setResults(data.data);
         setTotalPages(data.totalPages);

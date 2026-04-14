@@ -61,7 +61,7 @@ const LeaderboardPage = () => {
 
   const fetchUserRank = async () => {
     try {
-      console.log("Fetching user rank for user ID:", user._id);
+      
       const response = await axios.get(
         `${process.env.NEXT_PUBLIC_API_URL}/api/leaderboard/user/${user._id}`,
         {

@@ -28,7 +28,12 @@ import {
   SquareChevronRight
 } from "lucide-react";
 import { logout, fetchUser } from "@/lib/redux/slices/authSlice";
-import { MdAdminPanelSettings } from "react-icons/md";
+import { MdOutlineReceiptLong } from "react-icons/md";
+
+import { MdAdminPanelSettings,MdMenuBook } from "react-icons/md";
+import { FaBook } from "react-icons/fa6";
+import { FaSwatchbook } from "react-icons/fa";
+
 
 export default function DashboardLayout({ children }) {
   const { user, token, isAuthenticated } = useSelector((state) => state.auth);
@@ -89,7 +94,7 @@ export default function DashboardLayout({ children }) {
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center">
         <div className="text-center">
           <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 mb-4"></div>
-          <p className="text-white text-lg">Loading dashboard...</p>
+          <p className="text-white text-lg">Loading...</p>
         </div>
       </div>
     );
@@ -98,9 +103,9 @@ export default function DashboardLayout({ children }) {
   // Navigation items
   const navItems = [
     { id: "home", label: "Home", icon: Home, href: "/dashboard" },
-    { id: "tests", label: "My Tests", icon: ClipboardList, href: "/dashboard/tests" },
-    { id: "topic-wise-test", label: "Topic-wise Tests", icon: FileText, href: "/dashboard/topic-wise-test" },
-    { id: "subjects-wise-test", label: "Subjects", icon: Users, href: "/dashboard/subject-wise-test" },
+    { id: "tests", label: "Full Length Tests", icon: MdOutlineReceiptLong, href: "/dashboard/tests" },
+    { id: "topic-wise-test", label: "Topic-wise Tests", icon: FaSwatchbook, href: "/dashboard/topic-wise-test" },
+    { id: "subjects-wise-test", label: "Subject-wise Tests", icon: FaBook, href: "/dashboard/subject-wise-test" },
     { id: "results", label: "Results", icon: BarChart3, href: "/dashboard/my-results" },
     { id: "leaderboard", label: "Leaderboard", icon: Award, href: "/dashboard/leaderboard" },
     { id: "schedule", label: "Schedule", icon: Calendar, href: "/dashboard/schedule" },
@@ -119,7 +124,7 @@ export default function DashboardLayout({ children }) {
               <span className={`text-xl font-bold text-gray-800 dark:text-white whitespace-nowrap transition-all duration-300 ${
                 isSidebarOpen ? "opacity-100 translate-x-0" : "opacity-0 -translate-x-4 w-0"
               }`}>
-                Test One
+                Test Easy Mate
               </span>
             </div>
 
@@ -177,22 +182,26 @@ export default function DashboardLayout({ children }) {
       {
         isSidebarOpen? (
         <div className="border-t border-gray-200 dark:border-gray-700 p-4">
+         
           <div className="flex items-center space-x-3 px-4 py-3 rounded-xl bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700/50 dark:to-gray-700/30 hover:shadow-lg transition-all duration-300">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center text-white font-bold shadow-md flex-shrink-0">
-              {user?.name ? user.name.charAt(0).toUpperCase() : "U"} 
-            </div>
-            <div className={`flex-1 min-w-0 transition-all duration-300 ${
-              isSidebarOpen ? "opacity-100 translate-x-0" : "opacity-0 -translate-x-4 w-0 absolute"
-            }`}
-            onClick={() => router.push("/dashboard/profile")}
-            >
-              <p className="text-sm font-medium text-gray-800 dark:text-white truncate">
-                {user?.name || "User Name"} 
-                {user?.role === "admin" && <MdAdminPanelSettings className="inline text-yellow-400 ml-1" size={16} />} 
-              </p>
-              <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                {user?.email || "user@example.com"}
-              </p>
+            <div className="flex items-center space-x-3 overflow-hidden">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center text-white font-bold shadow-md flex-shrink-0">
+                {user?.name ? user.name.charAt(0).toUpperCase() : "U"} 
+              </div>
+              <div className={`flex-1 min-w-0 transition-all duration-300 ${
+                isSidebarOpen ? "opacity-100 translate-x-0" : "opacity-0 -translate-x-4 w-0 absolute"
+              }`}
+              onClick={() => router.push("/dashboard/profile")}
+              >
+                <p className="text-sm font-medium text-gray-800 dark:text-white truncate">
+                  {user?.name || "User Name"} 
+                  {user?.role === "admin" && <MdAdminPanelSettings className="inline text-yellow-400 ml-1" size={16} />} 
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                  {user?.email || "user@example.com"}
+                </p>
+              </div>
+
             </div>
             <button
               onClick={handleLogout}

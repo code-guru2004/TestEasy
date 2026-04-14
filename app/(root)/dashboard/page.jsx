@@ -96,51 +96,51 @@ const DashboardPage = () => {
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white rounded-lg shadow-md border border-gray-200 p-6">
+          <div className="bg-orange-600/20 rounded-lg shadow-md border border-gray-200 p-6">
             <div className="flex items-center justify-between mb-4">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <Target className="w-6 h-6 text-blue-600" />
+              <div className="p-2 bg-orange-100 rounded-lg">
+                <Target className="w-6 h-6 text-orange-600" />
               </div>
               <span className="text-2xl font-bold text-gray-900">{testStatistics.totalTestsAttempted}</span>
             </div>
-            <h3 className="text-sm font-medium text-gray-600">Tests Attempted</h3>
+            <h3 className="text-sm font-medium text-orange-900">Tests Attempted</h3>
           </div>
 
-          <div className="bg-white rounded-lg shadow-md border border-gray-200 p-6">
+          <div className="bg-green-600/10 rounded-lg shadow-md border border-gray-200 p-6">
             <div className="flex items-center justify-between mb-4">
               <div className="p-2 bg-green-100 rounded-lg">
                 <TrendingUp className="w-6 h-6 text-green-600" />
               </div>
               <span className="text-2xl font-bold text-green-600">{testStatistics.averageScore}%</span>
             </div>
-            <h3 className="text-sm font-medium text-gray-600">Average Score</h3>
+            <h3 className="text-sm font-medium text-green-700">Average Score</h3>
           </div>
 
-          <div className="bg-white rounded-lg shadow-md border border-gray-200 p-6">
+          <div className="bg-amber-500/10 rounded-lg shadow-md border border-gray-200 p-6">
             <div className="flex items-center justify-between mb-4">
               <div className="p-2 bg-yellow-100 rounded-lg">
                 <Trophy className="w-6 h-6 text-yellow-600" />
               </div>
               <span className="text-2xl font-bold text-gray-900">#{testStatistics.userRank || 'N/A'}</span>
             </div>
-            <h3 className="text-sm font-medium text-gray-600">Global Rank</h3>
+            <h3 className="text-sm font-medium text-yellow-600">Global Rank</h3>
           </div>
 
-          <div className="bg-white rounded-lg shadow-md border border-gray-200 p-6">
+          <div className="bg-purple-600/10 rounded-lg shadow-md border border-gray-200 p-6">
             <div className="flex items-center justify-between mb-4">
               <div className="p-2 bg-purple-100 rounded-lg">
                 <Bookmark className="w-6 h-6 text-purple-600" />
               </div>
               <span className="text-2xl font-bold text-gray-900">{totalBookmarks}</span>
             </div>
-            <h3 className="text-sm font-medium text-gray-600">Bookmarked Tests</h3>
+            <h3 className="text-sm font-medium text-purple-600">Bookmarked Tests</h3>
           </div>
         </div>
 
         {/* Performance Overview */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           {/* Score Distribution */}
-          <div className="bg-white rounded-lg shadow-md border border-gray-200 p-6">
+          <div className="bg-blue-600/10 rounded-lg shadow-md border border-gray-200 p-6">
             <h3 className="font-semibold text-gray-900 mb-4 flex items-center">
               <BarChart3 className="w-5 h-5 mr-2 text-blue-600" />
               Performance Overview
@@ -205,7 +205,7 @@ const DashboardPage = () => {
           </div>
 
           {/* Subject Wise Stats */}
-          <div className="bg-white rounded-lg shadow-md border border-gray-200 p-6">
+          <div className="bg-cyan-600/20 rounded-lg shadow-md border border-gray-200 p-6">
             <h3 className="font-semibold text-gray-900 mb-4 flex items-center">
               <Award className="w-5 h-5 mr-2 text-blue-600" />
               Subject Performance
@@ -237,7 +237,7 @@ const DashboardPage = () => {
         </div>
 
         {/* Latest Tests */}
-        <div className="bg-white rounded-lg shadow-md border border-gray-200 mb-8">
+        <div className="bg-red-500/10 rounded-lg shadow-md border border-gray-200 mb-8">
           <div className="px-6 py-4 border-b border-gray-200">
             <h3 className="font-semibold text-gray-900 flex items-center">
               <Clock className="w-5 h-5 mr-2 text-blue-600" />
@@ -295,7 +295,7 @@ const DashboardPage = () => {
         </div>
 
         {/* Performance Trend */}
-        <div className="bg-white rounded-lg shadow-md border border-gray-200">
+        <div className="bg-gray-100 rounded-lg shadow-md border border-gray-200">
           <div className="px-6 py-4 border-b border-gray-200">
             <h3 className="font-semibold text-gray-900 flex items-center">
               <Activity className="w-5 h-5 mr-2 text-blue-600" />

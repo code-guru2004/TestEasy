@@ -156,8 +156,7 @@ const ProfilePage = () => {
           }
         }
       );
-      console.log("Password change response:", response.data);
-
+  
       if (response.data.success) {
         setPasswordSuccess("Password changed successfully!");
         setPasswordData({

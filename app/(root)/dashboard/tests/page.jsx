@@ -15,11 +15,14 @@ import {
   RefreshCw,
   AlertCircle,
   Calendar,
-  TrendingUp,
   ChevronRight,
   Zap,
+  XCircle,
+  History,
+  FileText,
   CheckCircle,
-  XCircle
+  TrendingUp,
+  X
 } from "lucide-react";
 
 export default function UserTestsPage() {
@@ -30,6 +33,11 @@ export default function UserTestsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState("all");
+  const [showResultsDialog, setShowResultsDialog] = useState(false);
+  const [selectedTestForResults, setSelectedTestForResults] = useState(null);
+  const [attemptsData, setAttemptsData] = useState(null);
+  const [loadingAttempts, setLoadingAttempts] = useState(false);
+  const [attemptsError, setAttemptsError] = useState(null);
 
   useEffect(() => {
     fetchTests();
@@ -43,7 +51,7 @@ export default function UserTestsPage() {
     try {
       setLoading(true);
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/user/tests`,
+        `${process.env.NEXT_PUBLIC_API_URL}/api/tests/full-length`,
         {
           headers: {
             Authorization: `Bearer ${localStorage.getItem("token")}`
@@ -52,9 +60,9 @@ export default function UserTestsPage() {
       );
 
       const data = await res.json();
-      console.log("Fetched tests:", data.tests);
-      setTests(data.tests || []);
-      setFilteredTests(data.tests || []);
+      
+      setTests(data.data || []);
+      setFilteredTests(data.data || []);
     } catch (err) {
       console.error(err);
     } finally {
@@ -92,7 +100,7 @@ export default function UserTestsPage() {
   };
 
   const getButtonConfig = (test) => {
-    const remainingAttempts = test.maxAttempts - (test.attemptCount || 0);
+    const remainingAttempts = test.remainingAttempts ?? (test.maxAttempts - (test.totalAttempts || 0));
     
     if (remainingAttempts <= 0) {
       return { 
@@ -102,7 +110,7 @@ export default function UserTestsPage() {
       };
     }
     
-    if (test.userTestStatus === "in-progress") {
+    if (test.hasInProgress) {
       return { 
         text: "Resume Test", 
         disabled: false,
@@ -110,7 +118,7 @@ export default function UserTestsPage() {
       };
     }
     
-    if (test.userTestStatus === "completed" && remainingAttempts > 0) {
+    if (test.hasAttempted && remainingAttempts > 0) {
       return { 
         text: "Re-attempt", 
         disabled: false,
@@ -132,19 +140,19 @@ export default function UserTestsPage() {
     
     switch(variant) {
       case "danger":
-        return "bg-red-500 hover:bg-red-600 text-white shadow-sm hover:shadow";
+        return "bg-blue-600 hover:bg-blue-700 text-white shadow-sm hover:shadow";
       case "warning":
-        return "bg-amber-500 hover:bg-amber-600 text-white shadow-sm hover:shadow";
+        return "bg-blue-600 hover:bg-blue-700 text-white shadow-sm hover:shadow";
       case "primary":
-        return "bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white shadow-sm hover:shadow";
+        return "bg-blue-600 hover:bg-blue-700 text-white shadow-sm hover:shadow";
       default:
-        return "bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white shadow-sm hover:shadow";
+        return "bg-blue-600 hover:bg-blue-700 text-white shadow-sm hover:shadow";
     }
   };
 
   const handleTestAction = (test) => {
     const status = getTestStatus(test.startTime, test.endTime);
-    const remainingAttempts = test.maxAttempts - (test.attemptCount || 0);
+    const remainingAttempts = test.remainingAttempts ?? (test.maxAttempts - (test.totalAttempts || 0));
     
     if (status !== "active") {
       alert(status === "upcoming" ? "Test hasn't started yet" : "Test has expired");
@@ -156,17 +164,46 @@ export default function UserTestsPage() {
       return;
     }
     
-    if (test.userTestStatus === "in-progress") {
-      if (test.attemptId) {
-        router.push(`/user/attempt/${test.attemptId}`);
-      } else {
-        console.error("No attemptId found for in-progress test");
-        alert("Error: Unable to resume test");
-      }
+    if (test.hasInProgress) {
+      router.push(`/user/test/${test._id}`);
       return;
     }
     
-    router.push(`/user/test/${test._id}/start`);
+    router.push(`/user/test/${test._id}`);
+  };
+
+  const fetchAttempts = async (testId) => {
+    try {
+      setLoadingAttempts(true);
+      setAttemptsError(null);
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/tests/${testId}/attempts`,
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`
+          }
+        }
+      );
+
+      const data = await res.json();
+      
+      if (data && data.attempts) {
+        setAttemptsData(data);
+      } else {
+        setAttemptsError(data.message || "Failed to fetch attempts");
+      }
+    } catch (err) {
+      console.error(err);
+      setAttemptsError("Network error. Please try again.");
+    } finally {
+      setLoadingAttempts(false);
+    }
+  };
+
+  const handleShowResults = (test) => {
+    setSelectedTestForResults(test);
+    setShowResultsDialog(true);
+    fetchAttempts(test._id);
   };
 
   const formatDate = (dateString) => {
@@ -174,20 +211,28 @@ export default function UserTestsPage() {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   };
 
-  const getStatusIcon = (status) => {
-    switch(status) {
-      case "active": return <Zap size={12} />;
-      case "upcoming": return <Calendar size={12} />;
-      case "expired": return <XCircle size={12} />;
-      default: return null;
-    }
+  const formatDateTime = (dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric', 
+      year: 'numeric',
+      hour: '2-digit', 
+      minute: '2-digit',
+      second: '2-digit'
+    });
+  };
+
+  const calculatePercentage = (score, totalMarks) => {
+    if (!score || !totalMarks) return 0;
+    return (score / totalMarks) * 100;
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 flex justify-center items-center">
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex justify-center items-center">
         <div className="text-center">
-          <Loader2 className="animate-spin w-12 h-12 text-purple-500 mx-auto mb-3" />
+          <Loader2 className="animate-spin w-12 h-12 text-blue-600 mx-auto mb-3" />
           <p className="text-gray-500 dark:text-gray-400">Loading tests...</p>
         </div>
       </div>
@@ -195,15 +240,15 @@ export default function UserTestsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <div className="max-w-7xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-2">
-            <div className="bg-gradient-to-r from-purple-500 to-pink-500 p-2 rounded-xl">
+            <div className="bg-blue-600 p-2 rounded-xl">
               <BookOpen className="w-6 h-6 text-white" />
             </div>
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+            <h1 className="text-3xl font-bold text-gray-800 dark:text-white">
               Available Tests
             </h1>
           </div>
@@ -222,7 +267,7 @@ export default function UserTestsPage() {
                 placeholder="Search tests by name..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-800 dark:text-white"
+                className="w-full pl-9 pr-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-800 dark:text-white"
               />
             </div>
             
@@ -244,7 +289,7 @@ export default function UserTestsPage() {
                   onClick={() => setSelectedStatus("all")}
                   className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
                     selectedStatus === "all"
-                      ? "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400"
+                      ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
                       : "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300 hover:bg-gray-200"
                   }`}
                 >
@@ -254,7 +299,7 @@ export default function UserTestsPage() {
                   onClick={() => setSelectedStatus("active")}
                   className={`px-3 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-1 ${
                     selectedStatus === "active"
-                      ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                      ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
                       : "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300 hover:bg-gray-200"
                   }`}
                 >
@@ -274,7 +319,7 @@ export default function UserTestsPage() {
                   onClick={() => setSelectedStatus("expired")}
                   className={`px-3 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-1 ${
                     selectedStatus === "expired"
-                      ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                      ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
                       : "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300 hover:bg-gray-200"
                   }`}
                 >
@@ -287,7 +332,7 @@ export default function UserTestsPage() {
 
         {/* Stats Summary */}
         {filteredTests.length > 0 && (
-          <div className="mb-6 flex items-center justify-between">
+          <div className="mb-6 flex items-center justify-between flex-wrap gap-3">
             <p className="text-sm text-gray-500 dark:text-gray-400">
               Showing <span className="font-semibold text-gray-700 dark:text-gray-300">{filteredTests.length}</span> of{" "}
               <span className="font-semibold text-gray-700 dark:text-gray-300">{tests.length}</span> tests
@@ -326,8 +371,9 @@ export default function UserTestsPage() {
             {filteredTests.map((test) => {
               const status = getTestStatus(test.startTime, test.endTime);
               const btn = getButtonConfig(test);
-              const remainingAttempts = test.maxAttempts - (test.attemptCount || 0);
+              const remainingAttempts = test.remainingAttempts ?? (test.maxAttempts - (test.totalAttempts || 0));
               const isActive = status === "active";
+              const hasAttempts = (test.totalAttempts || 0) > 0;
               
               const statusConfig = {
                 active: { color: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400", icon: <Zap size={12} />, label: "Active" },
@@ -361,17 +407,17 @@ export default function UserTestsPage() {
                   <div className="px-5 py-3 bg-gray-50 dark:bg-gray-700/30 border-y border-gray-100 dark:border-gray-700">
                     <div className="grid grid-cols-3 gap-2">
                       <div className="text-center">
-                        <Clock size={14} className="mx-auto mb-1 text-purple-500" />
+                        <Clock size={14} className="mx-auto mb-1 text-blue-600" />
                         <p className="text-xs font-medium text-gray-700 dark:text-gray-300">{test.duration} min</p>
                         <p className="text-xs text-gray-400">Duration</p>
                       </div>
                       <div className="text-center">
-                        <Award size={14} className="mx-auto mb-1 text-purple-500" />
+                        <Award size={14} className="mx-auto mb-1 text-blue-600" />
                         <p className="text-xs font-medium text-gray-700 dark:text-gray-300">{test.totalMarks}</p>
                         <p className="text-xs text-gray-400">Marks</p>
                       </div>
                       <div className="text-center">
-                        <Users size={14} className="mx-auto mb-1 text-purple-500" />
+                        <Users size={14} className="mx-auto mb-1 text-blue-600" />
                         <p className="text-xs font-medium text-gray-700 dark:text-gray-300">{test.maxAttempts}</p>
                         <p className="text-xs text-gray-400">Attempts</p>
                       </div>
@@ -380,18 +426,18 @@ export default function UserTestsPage() {
 
                   {/* Attempt Info */}
                   <div className="px-5 py-3">
-                    {(test.attemptCount > 0 || remainingAttempts < test.maxAttempts) && (
-                      <div className="mb-3 p-2 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
+                    {(test.totalAttempts > 0 || remainingAttempts < test.maxAttempts) && (
+                      <div className="mb-3 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
                         <div className="flex items-center justify-between text-sm">
                           <span className="text-gray-600 dark:text-gray-400">Attempts Used</span>
-                          <span className="font-semibold text-purple-600 dark:text-purple-400">
-                            {test.attemptCount || 0} / {test.maxAttempts}
+                          <span className="font-semibold text-blue-600 dark:text-blue-400">
+                            {test.totalAttempts || 0} / {test.maxAttempts}
                           </span>
                         </div>
-                        <div className="mt-1 w-full bg-purple-200 dark:bg-purple-800 rounded-full h-1.5">
+                        <div className="mt-1 w-full bg-blue-200 dark:bg-blue-800 rounded-full h-1.5">
                           <div 
-                            className="bg-purple-600 h-1.5 rounded-full transition-all duration-300"
-                            style={{ width: `${((test.attemptCount || 0) / test.maxAttempts) * 100}%` }}
+                            className="bg-blue-600 h-1.5 rounded-full transition-all duration-300"
+                            style={{ width: `${((test.totalAttempts || 0) / test.maxAttempts) * 100}%` }}
                           />
                         </div>
                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
@@ -400,17 +446,15 @@ export default function UserTestsPage() {
                       </div>
                     )}
 
-                    {/* User Status Badge */}
-                    {test.userTestStatus && (
-                      <div className="mb-3 flex items-center justify-between text-sm">
-                        <span className="text-gray-600 dark:text-gray-400">Your Status</span>
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                          test.userTestStatus === "completed" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" :
-                          test.userTestStatus === "in-progress" ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" :
-                          "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-400"
-                        }`}>
-                          {test.userTestStatus === "in-progress" ? "In Progress" : 
-                           test.userTestStatus === "completed" ? "Completed" : "Not Started"}
+                    {/* Best Score Display */}
+                    {test.bestAttempt && (
+                      <div className="mb-3 flex items-center justify-between text-sm bg-gray-50 dark:bg-gray-700/30 p-2 rounded-lg">
+                        <span className="text-gray-600 dark:text-gray-400 flex items-center gap-1">
+                          <TrendingUp size={12} className="text-blue-600" />
+                          Best Score
+                        </span>
+                        <span className="font-semibold text-blue-600 dark:text-blue-400">
+                          {test.bestAttempt.percentage.toFixed(1)}% ({test.bestAttempt.score}/{test.bestAttempt.totalMarks})
                         </span>
                       </div>
                     )}
@@ -428,12 +472,12 @@ export default function UserTestsPage() {
                     </div>
                   </div>
 
-                  {/* Action Button */}
-                  <div className="px-5 pb-5">
+                  {/* Action Buttons */}
+                  <div className="px-5 pb-5 flex gap-2">
                     <button
                       onClick={() => handleTestAction(test)}
                       disabled={btn.disabled || !isActive}
-                      className={`w-full py-2.5 rounded-xl font-medium transition-all duration-200 flex items-center justify-center gap-2 ${
+                      className={`flex-1 py-2.5 rounded-xl font-medium transition-all duration-200 flex items-center justify-center gap-2 ${
                         getButtonColor(btn.variant, !btn.disabled && isActive, status)
                       }`}
                     >
@@ -445,8 +489,18 @@ export default function UserTestsPage() {
                         <Play size={16} />
                       )}
                       {!isActive ? status.charAt(0).toUpperCase() + status.slice(1) : btn.text}
-                      {btn.variant === "primary" && !btn.disabled && isActive && <ChevronRight size={14} />}
                     </button>
+                    
+                    {/* Results Button - only show if user has attempts */}
+                    {hasAttempts && (
+                      <button
+                        onClick={() => handleShowResults(test)}
+                        className="px-4 py-2.5 rounded-xl font-medium transition-all duration-200 flex items-center justify-center gap-2 bg-white border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                      >
+                        <History size={16} />
+                        Results
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -454,6 +508,193 @@ export default function UserTestsPage() {
           </div>
         )}
       </div>
+
+      {/* Results Dialog */}
+      {showResultsDialog && selectedTestForResults && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden shadow-2xl">
+            {/* Dialog Header */}
+            <div className="flex items-center justify-between p-5 border-b border-gray-200 dark:border-gray-700 bg-blue-50 dark:bg-blue-900/20">
+              <div className="flex items-center gap-3">
+                <div className="bg-blue-600 p-2 rounded-xl">
+                  <History className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-gray-800 dark:text-white">
+                    Test Attempts
+                  </h2>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    {selectedTestForResults.title}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowResultsDialog(false);
+                  setSelectedTestForResults(null);
+                  setAttemptsData(null);
+                  setAttemptsError(null);
+                }}
+                className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition"
+              >
+                <X size={20} className="text-gray-500" />
+              </button>
+            </div>
+
+            {/* Dialog Body */}
+            <div className="p-5 overflow-y-auto max-h-[calc(90vh-120px)]">
+              {loadingAttempts ? (
+                <div className="flex flex-col items-center justify-center py-12">
+                  <Loader2 className="animate-spin w-8 h-8 text-blue-600 mb-3" />
+                  <p className="text-gray-500 dark:text-gray-400">Loading attempts...</p>
+                </div>
+              ) : attemptsError ? (
+                <div className="text-center py-12">
+                  <AlertCircle size={48} className="mx-auto text-red-500 mb-3" />
+                  <p className="text-red-600 dark:text-red-400">{attemptsError}</p>
+                  <button
+                    onClick={() => fetchAttempts(selectedTestForResults._id)}
+                    className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                  >
+                    Try Again
+                  </button>
+                </div>
+              ) : attemptsData && attemptsData.attempts && attemptsData.attempts.length > 0 ? (
+                <div>
+                  {/* Summary Stats */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+                    <div className="bg-gray-50 dark:bg-gray-700/30 p-3 rounded-xl text-center">
+                      <p className="text-2xl font-bold text-blue-600">{attemptsData.count || attemptsData.attempts.length}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Total Attempts</p>
+                    </div>
+                    <div className="bg-gray-50 dark:bg-gray-700/30 p-3 rounded-xl text-center">
+                      <p className="text-2xl font-bold text-blue-600">
+                        {Math.max(...attemptsData.attempts.map(a => calculatePercentage(a.score, a.totalMarks)), 0).toFixed(1)}%
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Best Score</p>
+                    </div>
+                    <div className="bg-gray-50 dark:bg-gray-700/30 p-3 rounded-xl text-center">
+                      <p className="text-2xl font-bold text-blue-600">
+                        {(attemptsData.attempts.reduce((sum, a) => sum + calculatePercentage(a.score, a.totalMarks), 0) / attemptsData.attempts.length).toFixed(1)}%
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Average Score</p>
+                    </div>
+                    <div className="bg-gray-50 dark:bg-gray-700/30 p-3 rounded-xl text-center">
+                      <p className="text-2xl font-bold text-blue-600">
+                        {attemptsData.attempts.filter(a => a.submittedAt).length}
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Completed</p>
+                    </div>
+                  </div>
+
+                  {/* Attempts List */}
+                  <div className="space-y-3">
+                    <h3 className="font-semibold text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
+                      <FileText size={16} />
+                      Attempt History
+                    </h3>
+                    {attemptsData.attempts.map((attempt, index) => {
+                      const percentage = calculatePercentage(attempt.score, attempt.totalMarks);
+                      const isCompleted = !!attempt.submittedAt;
+                      
+                      return (
+                        <div
+                          key={attempt._id || index}
+                          className="border border-gray-200 dark:border-gray-700 rounded-xl p-4 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition"
+                        >
+                          <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                                Attempt #{attemptsData.attempts.length - index}
+                              </span>
+                              {isCompleted ? (
+                                <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 rounded-full flex items-center gap-1">
+                                  <CheckCircle size={10} /> Completed
+                                </span>
+                              ) : (
+                                <span className="text-xs px-2 py-0.5 bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 rounded-full flex items-center gap-1">
+                                  In Progress
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-xs text-gray-400">
+                              {formatDateTime(attempt.createdAt)}
+                            </span>
+                          </div>
+
+                          {isCompleted ? (
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+                              <div>
+                                <p className="text-xs text-gray-500 dark:text-gray-400">Score</p>
+                                <p className="text-sm font-semibold text-gray-800 dark:text-white">
+                                  {attempt.score} / {attempt.totalMarks}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-gray-500 dark:text-gray-400">Percentage</p>
+                                <p className="text-sm font-semibold text-blue-600">
+                                  {percentage.toFixed(1)}%
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-gray-500 dark:text-gray-400">Duration</p>
+                                <p className="text-sm font-semibold text-gray-800 dark:text-white">
+                                  {attempt.duration} min
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-gray-500 dark:text-gray-400">Status</p>
+                                <p className="text-sm font-semibold text-green-600">
+                                  Submitted
+                                </p>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="mt-3 p-2 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
+                              <p className="text-sm text-yellow-700 dark:text-yellow-400 flex items-center gap-2">
+                                <AlertCircle size={14} />
+                                This attempt is still in progress. Complete the test to see your results.
+                              </p>
+                            </div>
+                          )}
+
+                          {attempt.submittedAt && isCompleted && (
+                            <p className="text-xs text-gray-400 mt-3">
+                              Submitted: {formatDateTime(attempt.submittedAt)}
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <div className="w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <History size={24} className="text-gray-400" />
+                  </div>
+                  <p className="text-gray-500 dark:text-gray-400">No attempts found for this test</p>
+                </div>
+              )}
+            </div>
+
+            {/* Dialog Footer */}
+            <div className="p-5 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+              <button
+                onClick={() => {
+                  setShowResultsDialog(false);
+                  setSelectedTestForResults(null);
+                  setAttemptsData(null);
+                  setAttemptsError(null);
+                }}
+                className="w-full px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition font-medium"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <style jsx>{`
         .line-clamp-1 {

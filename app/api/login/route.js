@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 
 export async function POST(req) {
   const body = await req.json();
-console.log("Received login request with body:", body);
+
   const res = await axios.post("https://govt-quiz-app.onrender.com/api/auth/login", body, {
     withCredentials: true,
   });

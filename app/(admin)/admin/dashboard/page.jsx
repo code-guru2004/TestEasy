@@ -56,8 +56,7 @@ export default function AdminDashboard() {
           Authorization: `Bearer ${token}`,
         },
       });
-      console.log("Dashboard stats response:", response.data.stats);
-      
+
       if (response.data && response.data.stats) {
         setStats({
           totalUsers: response.data.stats.totalUsers || 0,

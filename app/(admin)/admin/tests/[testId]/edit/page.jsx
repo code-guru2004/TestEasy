@@ -197,7 +197,7 @@ export default function EditTestPage() {
       );
 
       const data = await res.json();
-      console.log("Add Questions Response:", data);
+     
       if (res.ok) {
         setMessageType("success");
         setMessage(`✅ Successfully added ${selected.length} question(s)!`);

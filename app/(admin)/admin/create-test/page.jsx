@@ -238,7 +238,7 @@ export default function CreateTestForm() {
       // Redirect to test details page to add questions
       setTimeout(() => {
         if (response.data.test?._id) {
-          router.push(`/dashboard/admin/tests/${response.data.test._id}/edit`);
+          router.push(`/admin/tests/${response.data.test._id}/edit`);
         } else {
           router.push("/dashboard/admin/tests");
         }

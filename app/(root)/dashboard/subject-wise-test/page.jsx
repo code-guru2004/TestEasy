@@ -58,7 +58,7 @@ const refreshSubjects = () => {
         }
       );
       const data = await res.json();
-      console.log("Fetched subjects:", data.data);
+    
       setSubjects(data.data || []);
       setFilteredSubjects(data.subjects || []);
       

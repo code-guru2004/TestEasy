@@ -68,7 +68,7 @@ export default function SubjectWiseTestsPage() {
         }
       );
       const data = await res.json();
-      console.log("Fetched subject tests:", data);
+     
       setSubject(data.subject);
       setTests(data.tests || []);
       setFilteredTests(data.tests || []);

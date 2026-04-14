@@ -267,7 +267,7 @@ export default function CreateQuestionPage() {
         setFormData({
           questionText: "",
           questionImage: "",
-          options: ["", ""],
+          options: ["", "", ""],
           correctAnswer: "",
           subject: "",
           topic: "",

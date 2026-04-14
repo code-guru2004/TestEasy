@@ -85,7 +85,7 @@ export default function CreateSubjectPage() {
       const data = await res.json();
   
       if (data.url) {
-        console.log("Upload successful, URL:", data.url);
+       
         setUploadedUrl(data.url);
         setFormData(prev => ({ ...prev, imageUrl: data.url }));
         setIsImageChanged(false);

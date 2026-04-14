@@ -95,7 +95,6 @@ export default function AuthPage() {
       };
       const result = await dispatch(loginUser(loginData));
       if (loginUser.fulfilled.match(result)) {
-        console.log("Login successful, navigating to dashboard...");
         router.push("/dashboard");
       }
     } else {

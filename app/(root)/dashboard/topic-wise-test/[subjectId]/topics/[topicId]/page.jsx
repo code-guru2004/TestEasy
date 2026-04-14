@@ -49,11 +49,14 @@ export default function TopicWiseTestsPage() {
 
   const fetchTests = async () => {
     try {
+      console.log("API :", `${process.env.NEXT_PUBLIC_API_URL}/api/tests/subject/${subjectId}/topic/${topicId}`);
       setLoading(true);
       const res = await axios.get(
         `${process.env.NEXT_PUBLIC_API_URL}/api/tests/subject/${subjectId}/topic/${topicId}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
+      
+      console.log("Fetched tests:", res.data.tests);
       setTests(res.data.tests || []);
     } catch (err) {
       setError("Failed to load tests");

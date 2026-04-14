@@ -78,7 +78,7 @@ export default function TopicsPage() {
       setFilteredTopics(subjectTopics);
       
       // Fetch stats for each topic (number of questions)
-      await fetchTopicStats(subjectTopics);
+      //await fetchTopicStats(subjectTopics);
       
     } catch (error) {
       console.error("Error fetching data:", error);
@@ -153,12 +153,12 @@ export default function TopicsPage() {
               {topic.name}
             </h3>
             
-            <div className="mt-2 flex items-center gap-2 text-xs text-gray-500">
+            {/* <div className="mt-2 flex items-center gap-2 text-xs text-gray-500">
               <span className="flex items-center gap-1">
                 <FileQuestion size={10} />
                 {stats.questionCount} questions
               </span>
-            </div>
+            </div> */}
             
             <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-700">
               <span className="text-xs text-purple-600 dark:text-purple-400 font-medium">
@@ -191,12 +191,12 @@ export default function TopicsPage() {
             <h3 className="font-medium text-gray-800 dark:text-white text-sm">
               {topic.name}
             </h3>
-            <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
+            {/* <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
               <span className="flex items-center gap-1">
                 <FileQuestion size={10} />
                 {stats.questionCount} questions
               </span>
-            </div>
+            </div> */}
           </div>
           
           {/* Arrow */}

@@ -7,24 +7,16 @@ import Link from "next/link";
 import {
   Home,
   FileText,
-  Users,
-  Settings,
   LogOut,
   Menu,
   X,
   ChevronLeft,
-  ChevronRight,
-  Bell,
   BarChart3,
-  ClipboardList,
   Award,
   Calendar,
-  MessageSquare,
   Moon,
   Sun,
   User,
-  CircleChevronRight,
-  MenuIcon,
   SquareChevronRight
 } from "lucide-react";
 import { logout, fetchUser } from "@/lib/redux/slices/authSlice";
@@ -118,8 +110,8 @@ export default function DashboardLayout({ children }) {
         {
           isSidebarOpen ? (
             <div className="flex items-center space-x-3 overflow-hidden">
-              <div className="bg-gradient-to-r from-purple-500 to-pink-500 p-2 rounded-lg flex-shrink-0">
-                <FileText className="w-6 h-6 text-white" />
+              <div className="bg-blue-500 p-2 rounded-lg flex-shrink-0">
+                <MdMenuBook className="w-6 h-6 text-white" />
               </div>
               <span className={`text-xl font-bold text-gray-800 dark:text-white whitespace-nowrap transition-all duration-300 ${
                 isSidebarOpen ? "opacity-100 translate-x-0" : "opacity-0 -translate-x-4 w-0"
@@ -129,8 +121,8 @@ export default function DashboardLayout({ children }) {
             </div>
 
           ) : (
-            <div className="bg-gradient-to-r from-purple-500 to-pink-500 p-2 rounded-lg flex-shrink-0 mx-auto">
-              <FileText className="w-6 h-6 text-white" />
+            <div className="bg-blue-500 p-2 rounded-lg flex-shrink-0 mx-auto">
+              <MdMenuBook className="w-6 h-6 text-white" />
             </div>
           )
         }
@@ -184,7 +176,7 @@ export default function DashboardLayout({ children }) {
         <div className="border-t border-gray-200 dark:border-gray-700 p-4">
          
           <div className="flex items-center space-x-3 px-4 py-3 rounded-xl bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700/50 dark:to-gray-700/30 hover:shadow-lg transition-all duration-300">
-            <div className="flex items-center space-x-3 overflow-hidden">
+            <div className="flex items-center space-x-3 overflow-hidden cursor-pointer" onClick={() => router.push("/dashboard/profile")}>
               <div className="w-10 h-10 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center text-white font-bold shadow-md flex-shrink-0">
                 {user?.name ? user.name.charAt(0).toUpperCase() : "U"} 
               </div>

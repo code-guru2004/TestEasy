@@ -42,7 +42,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: "Test Easy Mate - Master Quizzes & Challenge Yourself",
-    description: "Join Test Easy Mate to create, take, and share quizzes. Track your scores, compete with friends, and become a quiz master today!",
+    description: "Test Easy Mate is an advanced online test portal for government exam preparation, designed to help aspirants practice smarter and score higher. The platform provides high-quality mock tests, topic-wise quizzes, and full-length test series based on the latest exam patterns. With real exam-like practice, Test Easy Mate helps you identify weak areas and improve performance through detailed analysis and insights. Whether you're preparing for UPSC, SSC, Banking, or any other competitive exam, Test Easy Mate offers a comprehensive suite of tools to enhance your preparation. Join our community of learners and take your exam readiness to the next level with Test Easy Mate.",
     url: "https://test-easy-mate.vercel.app",
     siteName: "Test Easy Mate",
     images: [

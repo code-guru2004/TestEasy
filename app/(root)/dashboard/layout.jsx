@@ -25,6 +25,7 @@ import { MdOutlineReceiptLong } from "react-icons/md";
 import { MdAdminPanelSettings,MdMenuBook } from "react-icons/md";
 import { FaBook } from "react-icons/fa6";
 import { FaSwatchbook } from "react-icons/fa";
+import { GiBracers } from "react-icons/gi";
 
 
 
@@ -107,6 +108,7 @@ export default function DashboardLayout({ children }) {
     { id: "tests", label: "Full Length Tests", icon: MdOutlineReceiptLong, href: "/dashboard/tests" },
     { id: "topic-wise-test", label: "Topic-wise Tests", icon: FaSwatchbook, href: "/dashboard/topic-wise-test" },
     { id: "subjects-wise-test", label: "Subject-wise Tests", icon: FaBook, href: "/dashboard/subject-wise-test" },
+    {id: "Contests", label: "contests", icon: GiBracers, href: "/dashboard/coming-soon"},
     { id: "results", label: "Results", icon: BarChart3, href: "/dashboard/my-results" },
     { id: "leaderboard", label: "Leaderboard", icon: Award, href: "/dashboard/leaderboard" },
     { id: "schedule", label: "Schedule", icon: Calendar, href: "/dashboard/schedule" },

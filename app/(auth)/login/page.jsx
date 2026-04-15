@@ -182,13 +182,13 @@ export default function AuthPage() {
           )}
 
           {/* Success Message for Registration */}
-          {!isLogin && !error && (
+          {/* {!isLogin && !error && (
             <div className="mx-6 mt-4 p-3 bg-green-500/20 border border-green-500/50 rounded-xl">
               <p className="text-green-300 text-sm text-center">
                 Registration successful! Please login.
               </p>
             </div>
-          )}
+          )} */}
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="p-6 space-y-5">

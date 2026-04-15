@@ -12,18 +12,14 @@ export async function GET(req) {
 
     //console.log("Extracted token:", token);
 
-    const res = await fetch("https://govt-quiz-app.onrender.com/api/auth/me", {
+    const res = await fetch("https://govt-quiz-app.onrender.com/api/auth/me",  {
       headers: {
-        // Option 1: Send as cookie (if backend expects cookie)
-        cookie: `token=${token}`,
-
-        // Option 2 (better): Send as Authorization header
-        // Authorization: `Bearer ${token}`,
-      },
+        Authorization: `Bearer ${token}`,
+      }
     });
 
     const data = await res.json();
-
+   // console.log("User data fetched from API:", data);
     return NextResponse.json(data);
   } catch (error) {
     console.error("Error fetching user data:", error);

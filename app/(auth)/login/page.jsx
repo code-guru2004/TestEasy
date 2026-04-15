@@ -1,4 +1,3 @@
-// app/page.js
 "use client";
 
 import { useState, useEffect } from "react";
@@ -7,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Mail, Lock, User, ArrowRight, LogIn } from "lucide-react";
 import { FaPhone } from "react-icons/fa6";
 import { loginUser, registerUser, clearError } from "../../../lib/redux/slices/authSlice";
+import Cookies from "js-cookie";
 
 export default function AuthPage() {
   const dispatch = useDispatch();
@@ -24,20 +24,50 @@ export default function AuthPage() {
     mobile: ""
   });
   const [errors, setErrors] = useState({});
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
-  // Redirect if already logged in
+  // Check for token in cookies and redirect if found
   useEffect(() => {
-    if (token) {
+    const checkAuth = async () => {
+      const cookieToken = Cookies.get("token");
+      
+      if (cookieToken) {
+        console.log("Token found in cookies:", cookieToken);
+        // Optionally dispatch an action to set the token in Redux state
+        // dispatch(setAuthToken(cookieToken));
+        router.push("/dashboard");
+      } else {
+        setIsCheckingAuth(false);
+      }
+    };
 
+    checkAuth();
+  }, [router]); // Only run once on mount
+
+  // Redirect if token exists in Redux state
+  useEffect(() => {
+    if (token && !isCheckingAuth) {
       router.push("/dashboard");
     }
-  }, [token, router]);
+  }, [token]);
 
   // Clear errors when switching modes
   useEffect(() => {
     dispatch(clearError());
     setErrors({});
   }, [isLogin, dispatch]);
+
+  // Show loading or null while checking authentication
+  if (isCheckingAuth) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center">
+        <div className="text-white text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 mx-auto mb-4"></div>
+          <p>Checking authentication...</p>
+        </div>
+      </div>
+    );
+  }
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -94,8 +124,11 @@ export default function AuthPage() {
         password: formData.password
       };
       const result = await dispatch(loginUser(loginData));
+      console.log("Login result:", result);
+      console.log("Login fulfilled:", loginUser.fulfilled.match(result));
       if (loginUser.fulfilled.match(result)) {
-        router.push("/dashboard");
+        console.log("Login successful, redirecting to dashboard...");
+        router.replace("/dashboard");
       }
     } else {
       // Register

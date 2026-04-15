@@ -26,7 +26,8 @@ import {
   Calendar,
   Star,
   Activity,
-  Shield
+  Shield,
+  ArrowLeft
 } from "lucide-react";
 
 export default function AdminDashboard() {
@@ -187,16 +188,23 @@ export default function AdminDashboard() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        
+        <div className="mb-4 ">
+          <button className="text-sm flex items-center gap-1 rounded-full bg-cyan-500/10 p-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition" onClick={() => router.push("/dashboard")}>
+              <ArrowLeft className="" size={15}/>
+              <span>
+                Back to user dashboard
+              </span>
+          </button>
+        </div>
         {/* Welcome Section */}
         <div className="mb-8">
           <div className="flex justify-between items-center flex-wrap gap-4">
             <div>
               <div className="flex items-center space-x-3 mb-2">
-                <div className="bg-gradient-to-r from-purple-600 to-pink-600 p-2 rounded-xl">
+                <div className="bg-gradient-to-r from-blue-600 to-cyan-600 p-2 rounded-xl">
                   <Shield className="text-white" size={28} />
                 </div>
-                <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+                <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-cyan-400 to-cyan-600 bg-clip-text text-transparent">
                   Admin Dashboard
                 </h1>
               </div>

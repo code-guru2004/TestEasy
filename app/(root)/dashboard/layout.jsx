@@ -19,12 +19,13 @@ import {
   User,
   SquareChevronRight
 } from "lucide-react";
-import { logout, fetchUser } from "@/lib/redux/slices/authSlice";
+import { logout, fetchUser, logoutUser } from "@/lib/redux/slices/authSlice";
 import { MdOutlineReceiptLong } from "react-icons/md";
 
 import { MdAdminPanelSettings,MdMenuBook } from "react-icons/md";
 import { FaBook } from "react-icons/fa6";
 import { FaSwatchbook } from "react-icons/fa";
+
 
 
 export default function DashboardLayout({ children }) {
@@ -72,9 +73,17 @@ export default function DashboardLayout({ children }) {
     return () => window.removeEventListener("resize", handleResize);
   }, [dispatch, router]);
 
-  const handleLogout = () => {
-    dispatch(logout());
-    router.push("/");
+  useEffect(() => {
+    console.log("User data in dashboard layout:", user);
+  }, [user]);
+
+
+  const handleLogout = async() => {
+    const resp = await dispatch(logoutUser());
+    if(resp){
+      //console.log("Logout successful");
+      router.replace("/login");
+    }
   };
 
   const toggleTheme = () => {
@@ -195,6 +204,7 @@ export default function DashboardLayout({ children }) {
               </div>
 
             </div>
+            {/* Logout */}
             <button
               onClick={handleLogout}
               className="p-2 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400 transition-all duration-200 hover:scale-110 flex-shrink-0"
@@ -218,20 +228,20 @@ export default function DashboardLayout({ children }) {
     <div className="md:hidden fixed top-0 left-0 right-0 bg-white/95 dark:bg-gray-800/95 backdrop-blur-md border-b border-gray-200 dark:border-gray-700 z-40 animate-slideDown">
       <div className="flex items-center justify-between px-4 py-3">
         <div className="flex items-center space-x-3">
-          <div className="bg-gradient-to-r from-purple-500 to-pink-500 p-2 rounded-lg animate-pulse">
-            <FileText className="w-5 h-5 text-white" />
+          <div className="bg-gradient-to-r from-blue-500 to-cyan-500 p-2 rounded-lg">
+            <MdMenuBook className="w-5 h-5 text-white" />
           </div>
-          <span className="text-lg font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
-            TestPortal
+          <span className="text-lg font-bold bg-gradient-to-r from-cyan-600 to-cyan-700 bg-clip-text text-transparent">
+            Test Easy Mate
           </span>
         </div>
         <div className="flex items-center space-x-2">
-          <button
+          {/* <button
             onClick={toggleTheme}
             className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-200 hover:scale-110"
           >
             {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
-          </button>
+          </button> */}
           <button
             onClick={() => setIsMobileMenuOpen(true)}
             className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-200 hover:scale-110"
@@ -254,10 +264,10 @@ export default function DashboardLayout({ children }) {
           <div className="fixed right-0 top-0 bottom-0 w-80 bg-white dark:bg-gray-800 shadow-2xl z-50 md:hidden animate-slideInRight">
             <div className="flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-purple-50 to-pink-50 dark:from-gray-700 dark:to-gray-800">
               <div className="flex items-center space-x-3">
-                <div className="bg-gradient-to-r from-purple-500 to-pink-500 p-2 rounded-lg animate-bounce">
-                  <FileText className="w-5 h-5 text-white" />
+                <div className="bg-gradient-to-r from-blue-500 to-cyan-500 p-2 rounded-lg">
+                  <MdMenuBook className="w-5 h-5 text-white" />
                 </div>
-                <span className="text-lg font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+                <span className="text-lg font-bold  ">
                   Menu
                 </span>
               </div>
@@ -296,10 +306,24 @@ export default function DashboardLayout({ children }) {
                 </Link>
               ))}
             </div>
-            <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+            <div className="p-4 border-t flex items-center  border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+   
+                <div className="flex items-center space-x-3 "
+                  onClick={() => {
+                    router.push("/dashboard/profile");
+                    setIsMobileMenuOpen(false);
+                  }}
+                >
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center text-white font-bold shadow-md flex-shrink-0">
+                    {user?.name ? user.name.charAt(0).toUpperCase() : "U"}
+                  </div>
+         
+              </div>
+              {/* separator */}
+              <div className="border-l border-gray-300 dark:border-gray-600 h-6 mx-4" />
               <button
                 onClick={handleLogout}
-                className="w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all duration-200 hover:scale-105 group"
+                className="flex items-center  gap-2 p-2 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400 transition-all duration-200 hover:scale-105 w-full justify-center group" 
               >
                 <LogOut size={20} className="group-hover:rotate-12 transition-transform" />
                 <span className="font-medium">Logout</span>

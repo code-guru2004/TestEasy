@@ -3,6 +3,8 @@ import "./globals.css";
 import  ReduxProvider  from "../lib/redux/providers/ReduxProvider";
 import AuthLoader from "../lib/redux/authLoader";
 import { Roboto_Condensed } from 'next/font/google';
+import VerifyOtpGate from "@/components/auth/VerifyOtpGate";
+
 
 const robotoCondensed = Roboto_Condensed({
   variable: "--font-roboto-condensed",
@@ -28,7 +30,10 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         <ReduxProvider>
           <AuthLoader />
-          {children}
+           {/* 🔐 OTP Gate goes HERE */}
+           <VerifyOtpGate>
+            {children}
+          </VerifyOtpGate>
         </ReduxProvider>
       </body>
     </html>

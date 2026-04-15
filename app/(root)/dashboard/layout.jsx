@@ -396,7 +396,7 @@ export default function DashboardLayout({ children }) {
       <MobileHeader />
       <MobileMenuDrawer />
       
-      <div className="flex h-screen pt-0 md:pt-0 pb-16 md:pb-0">
+      <div className="flex h-screen pt-0 md:pt-0 pb-2 md:pb-0">
         <aside
           className={`hidden md:block fixed left-0 top-0 h-full bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transition-all duration-300 ease-in-out z-30 ${
             isSidebarOpen ? "w-72" : "w-20"

@@ -246,7 +246,7 @@ const DashboardPage = () => {
           </div>
           <div className="divide-y divide-gray-200">
             {recentActivity.latestThreeTests.map((test, index) => (
-              <div key={test.testId} className="px-6 py-4 hover:bg-gray-50 transition-colors">
+              <div key={index} className="px-6 py-4 hover:bg-gray-50 transition-colors">
                 <div className="flex items-center justify-between flex-wrap gap-4">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">

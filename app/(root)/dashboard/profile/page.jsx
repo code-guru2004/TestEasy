@@ -1,7 +1,6 @@
 "use client";
 // pages/profile.jsx or app/profile/page.jsx
 import React, { useState, useEffect } from "react";
-import { useSelector } from "react-redux";
 import axios from "axios";
 import { 
   User, 
@@ -18,10 +17,12 @@ import {
   LogOut
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-
+import { useSelector, useDispatch } from "react-redux";
+import { logoutUser } from "@/lib/redux/slices/authSlice";
 const ProfilePage = () => {
   const { user } = useSelector((state) => state.auth);
   const router = useRouter();
+  const dispatch = useDispatch();
   const [profileData, setProfileData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -177,9 +178,12 @@ const ProfilePage = () => {
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem("token");
-    router.push("/login");
+  const handleLogout = async() => {
+    const resp = await dispatch(logoutUser());
+    if(resp){
+      //console.log("Logout successful");
+      router.replace("/login");
+    }
   };
 
   if (loading) {
@@ -380,7 +384,17 @@ const ProfilePage = () => {
               <Key className="w-4 h-4" />
               Change Password
             </button>
-            
+            {
+              profileData.role === "admin" && (
+                <button
+                  onClick={() => router.push("/admin/dashboard")}
+                  className="flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                >
+                  <Shield className="w-4 h-4" />
+                  Admin Dashboard
+                </button>
+              )
+            }
             <button
               onClick={handleLogout}
               className="flex items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"

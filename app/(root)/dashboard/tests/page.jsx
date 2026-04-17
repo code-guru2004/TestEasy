@@ -623,7 +623,7 @@ export default function UserTestsPage() {
                           </div>
 
                           {isCompleted ? (
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+                            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-3">
                               <div>
                                 <p className="text-xs text-gray-500 dark:text-gray-400">Score</p>
                                 <p className="text-sm font-semibold text-gray-800 dark:text-white">
@@ -647,6 +647,17 @@ export default function UserTestsPage() {
                                 <p className="text-sm font-semibold text-green-600">
                                   Submitted
                                 </p>
+                              </div>
+                              <div className="flex flex-col items-center gap-1">
+                                <p className="text-xs text-gray-500 dark:text-gray-400">Action</p>
+                                <button 
+                                className="bg-gradient-to-r from-green-500 to-green-200 hover:bg-green-600 px-2 py-1 rounded-4xl text-xs"
+                                onClick={()=>{
+                                  router.push("/user/")
+                                }}
+                                >
+                                  View Result
+                                </button>
                               </div>
                             </div>
                           ) : (

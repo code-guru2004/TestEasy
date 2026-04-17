@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
 import {
   Award,
@@ -24,7 +24,8 @@ import {
   Filter,
   Medal,
   Crown,
-  Trophy
+  Trophy,
+  Globe
 } from "lucide-react";
 
 export default function TestResultPage() {
@@ -40,6 +41,35 @@ export default function TestResultPage() {
   const [leaderboard, setLeaderboard] = useState([]);
   const [answerFilter, setAnswerFilter] = useState("all"); // all, correct, incorrect
   const [expandedAnswers, setExpandedAnswers] = useState({});
+  const [selectedLanguage, setSelectedLanguage] = useState("en");
+
+  // Languages configuration
+  const languages = [
+    { code: "en", name: "English", flag: "🇬🇧" },
+    { code: "hi", name: "हिंदी", flag: "🇮🇳" },
+    { code: "bn", name: "বাংলা", flag: "🇧🇩" }
+  ];
+
+  // Helper function to get localized text
+  const getLocalizedText = useCallback((textObj) => {
+    if (!textObj) return "—";
+    if (typeof textObj === 'string') return textObj;
+    return textObj[selectedLanguage] || textObj.en || "—";
+  }, [selectedLanguage]);
+
+  // Helper function to get localized option text from option object
+  const getLocalizedOptionText = useCallback((option) => {
+    if (!option) return "—";
+    if (typeof option === 'string') return option;
+    return option[selectedLanguage] || option.en || "—";
+  }, [selectedLanguage]);
+
+  // Helper function to get option text by ID
+  const getOptionTextById = useCallback((options, optionId) => {
+    if (!options || !optionId) return null;
+    const option = options.find(opt => opt.id === optionId);
+    return option ? getLocalizedOptionText(option) : null;
+  }, [getLocalizedOptionText]);
 
   useEffect(() => {
     if (attemptId) {
@@ -49,13 +79,13 @@ export default function TestResultPage() {
     }
   }, [attemptId, testId]);
 
-   // Refetch when page becomes visible
-   useEffect(() => {
+  // Refetch when page becomes visible
+  useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
         setLoading(true);
-        //console.log("Page is visible, refetching results...");
         fetchResult();
+        fetchLeaderboard();
       }
     };
     document.addEventListener("visibilitychange", handleVisibilityChange);
@@ -63,6 +93,7 @@ export default function TestResultPage() {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, []);
+
   const fetchResult = async () => {
     try {
       const res = await fetch(
@@ -138,11 +169,23 @@ export default function TestResultPage() {
     });
   };
 
+  // Process questions with localized text
+  const processedQuestions = result?.questions?.map(q => ({
+    ...q,
+    localizedQuestionText: getLocalizedText(q.questionText),
+    localizedOptions: q.options?.map(opt => ({
+      ...opt,
+      localizedText: getLocalizedOptionText(opt)
+    })),
+    selectedOptionText: getOptionTextById(q.options, q.selectedOption),
+    correctAnswerText: getOptionTextById(q.options, q.correctAnswer)
+  })) || [];
+
   // Pie chart data
-  const correctCount = result?.questions?.filter(q => q.isCorrect === true).length || 0;
-  const wrongCount = result?.questions?.filter(q => q.isCorrect === false).length || 0;
-  const unattemptedCount = result?.questions?.filter(q => !q.selectedOption).length || 0;
-  const totalQuestions = result?.questions?.length || 0;
+  const correctCount = processedQuestions.filter(q => q.isCorrect === true).length || 0;
+  const wrongCount = processedQuestions.filter(q => q.isCorrect === false).length || 0;
+  const unattemptedCount = processedQuestions.filter(q => !q.selectedOption).length || 0;
+  const totalQuestions = processedQuestions.length || 0;
   
   const correctPercentage = totalQuestions ? (correctCount / totalQuestions) * 100 : 0;
   const wrongPercentage = totalQuestions ? (wrongCount / totalQuestions) * 100 : 0;
@@ -150,8 +193,8 @@ export default function TestResultPage() {
 
   // Filter answers based on selection
   const getFilteredAnswers = () => {
-    if (!result?.questions) return [];
-    return result.questions.filter(q => {
+    if (!processedQuestions) return [];
+    return processedQuestions.filter(q => {
       if (answerFilter === "correct") return q.isCorrect === true;
       if (answerFilter === "incorrect") return q.isCorrect === false;
       return true;
@@ -196,15 +239,33 @@ export default function TestResultPage() {
       <div className="max-w-6xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-8">
-          <button
-            onClick={() => router.push("/dashboard")}
-            className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition mb-4"
-          >
-            <Home size={18} />
-            Back to Dashboard
-          </button>
-          
           <div className="flex items-center justify-between flex-wrap gap-4">
+            <button
+              onClick={() => router.push("/dashboard")}
+              className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition mb-4"
+            >
+              <Home size={18} />
+              Back to Dashboard
+            </button>
+            
+            {/* Language Selector */}
+            <div className="flex items-center gap-2 px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800">
+              <Globe size={16} className="text-gray-500" />
+              <select
+                value={selectedLanguage}
+                onChange={(e) => setSelectedLanguage(e.target.value)}
+                className="bg-transparent text-gray-700 dark:text-gray-300 text-sm focus:outline-none cursor-pointer"
+              >
+                {languages.map(lang => (
+                  <option key={lang.code} value={lang.code}>
+                    {lang.flag} {lang.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          
+          <div className="flex items-center justify-between flex-wrap gap-4 mt-2">
             <div className="flex items-center space-x-3">
               <div className="bg-blue-100 dark:bg-blue-900/30 p-2 rounded-lg">
                 <FileText className="w-6 h-6 text-blue-600 dark:text-blue-400" />
@@ -448,7 +509,7 @@ export default function TestResultPage() {
                   </div>
                 ) : (
                   filteredAnswers.map((q, index) => {
-                    const originalIndex = result.questions.findIndex(orig => orig.questionId === q.questionId);
+                    const originalIndex = processedQuestions.findIndex(orig => orig.questionId === q.questionId);
                     return (
                       <div key={index} className="p-6">
                         <button
@@ -479,12 +540,12 @@ export default function TestResultPage() {
                               )}
                             </div>
                             <p className="text-gray-800 dark:text-white font-medium">
-                              {q.questionText}
+                              {q.localizedQuestionText}
                             </p>
                             <div className="mt-2 text-sm">
                               <span className="text-gray-500">Your answer: </span>
                               <span className={q.isCorrect ? "text-green-600 dark:text-green-400 font-medium" : "text-red-600 dark:text-red-400 font-medium"}>
-                                {q.selectedOption || "Not answered"}
+                                {q.selectedOptionText || "Not answered"}
                               </span>
                             </div>
                           </div>
@@ -497,29 +558,34 @@ export default function TestResultPage() {
                               <div>
                                 <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">All Options:</p>
                                 <div className="space-y-2">
-                                  {q.options?.map((opt, optIdx) => (
-                                    <div 
-                                      key={optIdx}
-                                      className={`text-sm p-2 rounded ${
-                                        opt === q.correctAnswer 
-                                          ? "bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-300"
-                                          : opt === q.selectedOption && opt !== q.correctAnswer
-                                          ? "bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-300"
-                                          : "text-gray-600 dark:text-gray-400"
-                                      }`}
-                                    >
-                                      {String.fromCharCode(65 + optIdx)}. {opt}
-                                      {opt === q.correctAnswer && (
-                                        <span className="ml-2 text-xs text-green-600 dark:text-green-400">(Correct Answer)</span>
-                                      )}
-                                      {opt === q.selectedOption && opt !== q.correctAnswer && (
-                                        <span className="ml-2 text-xs text-red-600 dark:text-red-400">(Your Answer)</span>
-                                      )}
-                                      {opt === q.selectedOption && opt === q.correctAnswer && (
-                                        <span className="ml-2 text-xs text-green-600 dark:text-green-400">(Your Answer ✓)</span>
-                                      )}
-                                    </div>
-                                  ))}
+                                  {q.localizedOptions?.map((opt, optIdx) => {
+                                    const isSelected = opt.id === q.selectedOption;
+                                    const isCorrect = opt.id === q.correctAnswer;
+                                    
+                                    return (
+                                      <div 
+                                        key={opt.id || optIdx}
+                                        className={`text-sm p-2 rounded ${
+                                          isCorrect 
+                                            ? "bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-300"
+                                            : isSelected && !isCorrect
+                                            ? "bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-300"
+                                            : "text-gray-600 dark:text-gray-400"
+                                        }`}
+                                      >
+                                        {String.fromCharCode(65 + optIdx)}. {opt.localizedText}
+                                        {isCorrect && (
+                                          <span className="ml-2 text-xs text-green-600 dark:text-green-400">(Correct Answer)</span>
+                                        )}
+                                        {isSelected && !isCorrect && (
+                                          <span className="ml-2 text-xs text-red-600 dark:text-red-400">(Your Answer)</span>
+                                        )}
+                                        {isSelected && isCorrect && (
+                                          <span className="ml-2 text-xs text-green-600 dark:text-green-400">(Your Answer ✓)</span>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                               </div>
                             </div>
@@ -569,7 +635,7 @@ export default function TestResultPage() {
                         {idx === 1 && <Medal size={28} className="text-gray-500" />}
                         {idx === 2 && <Medal size={28} className="text-orange-500" />}
                       </div>
-                      <div className="text-2xl font-bold text-gray-800 dark:text-white mb-1">#{idx + 1}</div>
+                      <div className="text-2xl font-bold text-gray-800 dark:text-white mb-1">#{entry.rank || idx + 1}</div>
                       <p className="font-semibold text-gray-800 dark:text-white">{entry.name}</p>
                       <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">{entry.email}</p>
                       <div className="inline-block px-3 py-1 bg-blue-100 dark:bg-blue-900/30 rounded-full">
@@ -603,12 +669,12 @@ export default function TestResultPage() {
                     <div className="grid grid-cols-12 gap-4 items-center">
                       <div className="col-span-1">
                         <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${
-                          idx === 0 ? "bg-yellow-100 text-yellow-700" :
-                          idx === 1 ? "bg-gray-100 text-gray-700" :
-                          idx === 2 ? "bg-orange-100 text-orange-700" :
+                          entry.rank === 1 ? "bg-yellow-100 text-yellow-700" :
+                          entry.rank === 2 ? "bg-gray-100 text-gray-700" :
+                          entry.rank === 3 ? "bg-orange-100 text-orange-700" :
                           "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
                         }`}>
-                          #{idx + 1}
+                          #{entry.rank}
                         </div>
                       </div>
                       <div className="col-span-7">
@@ -630,13 +696,13 @@ export default function TestResultPage() {
         {/* Action Buttons */}
         <div className="mt-6 flex gap-4 justify-end">
           <button
-            onClick={() => router.push("/user/test")}
+            onClick={() => router.push("/dashboard/tests")}
             className="px-6 py-3 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition font-medium"
           >
             Browse More Tests
           </button>
           <button
-            onClick={() => router.push(`/user/test/${testId}/start`)}
+            onClick={() => router.push(`/user/test/${testId}`)}
             className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition font-medium flex items-center gap-2"
           >
             <Zap size={18} />

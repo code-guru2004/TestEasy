@@ -21,7 +21,7 @@ export default function VerifyOtpGate({ children }) {
     <>
       {children}
 
-      {open && (
+      {user && open && (
         <>
           {/* Desktop / Tablet */}
           <div className="hidden md:block">

@@ -32,7 +32,7 @@ export default function AuthPage() {
       const cookieToken = Cookies.get("token");
       
       if (cookieToken) {
-        console.log("Token found in cookies:", cookieToken);
+       
         // Optionally dispatch an action to set the token in Redux state
         // dispatch(setAuthToken(cookieToken));
         router.push("/dashboard");
@@ -124,10 +124,9 @@ export default function AuthPage() {
         password: formData.password
       };
       const result = await dispatch(loginUser(loginData));
-      console.log("Login result:", result);
-      console.log("Login fulfilled:", loginUser.fulfilled.match(result));
+ 
       if (loginUser.fulfilled.match(result)) {
-        console.log("Login successful, redirecting to dashboard...");
+     
         router.replace("/dashboard");
       }
     } else {

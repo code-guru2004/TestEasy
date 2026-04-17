@@ -105,6 +105,8 @@ export default function OtpDrawer({ open, onClose }) {
       setResending(true);
       setError("");
       setTimer(30);
+      const token = localStorage.getItem("token");
+
       await axios.post(
         `${process.env.NEXT_PUBLIC_API_URL}/api/auth/resend-otp`,
         {},

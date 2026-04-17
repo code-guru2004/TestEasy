@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Home,
-  FileText,
   LogOut,
   Menu,
   X,
@@ -14,12 +13,10 @@ import {
   BarChart3,
   Award,
   Calendar,
-  Moon,
-  Sun,
   User,
   SquareChevronRight
 } from "lucide-react";
-import { logout, fetchUser, logoutUser } from "@/lib/redux/slices/authSlice";
+import {  fetchUser, logoutUser } from "@/lib/redux/slices/authSlice";
 import { MdOutlineReceiptLong } from "react-icons/md";
 
 import { MdAdminPanelSettings,MdMenuBook } from "react-icons/md";
@@ -52,6 +49,7 @@ export default function DashboardLayout({ children }) {
     else if (currentPath === "/dashboard/my-results") setActiveTab("results");
     else if (currentPath === "/dashboard/leaderboard") setActiveTab("leaderboard");
     else if (currentPath === "/dashboard/schedule") setActiveTab("schedule");
+    else if (currentPath === "/dashboard/profile") setActiveTab("Profile");
     
     dispatch(fetchUser()).then((res) => {
       if (res.meta.requestStatus === "rejected") {
@@ -74,9 +72,9 @@ export default function DashboardLayout({ children }) {
     return () => window.removeEventListener("resize", handleResize);
   }, [dispatch, router]);
 
-  useEffect(() => {
-    console.log("User data in dashboard layout:", user);
-  }, [user]);
+  // useEffect(() => {
+  //   console.log("User data in dashboard layout:", user);
+  // }, [user]);
 
 
   const handleLogout = async() => {
@@ -108,11 +106,11 @@ export default function DashboardLayout({ children }) {
     { id: "tests", label: "Full Length Tests", icon: MdOutlineReceiptLong, href: "/dashboard/tests" },
     { id: "topic-wise-test", label: "Topic-wise Tests", icon: FaSwatchbook, href: "/dashboard/topic-wise-test" },
     { id: "subjects-wise-test", label: "Subject-wise Tests", icon: FaBook, href: "/dashboard/subject-wise-test" },
-    {id: "Contests", label: "contests", icon: GiBracers, href: "/dashboard/coming-soon"},
+    {id: "Contests", label: "Contests", icon: GiBracers, href: "/dashboard/coming-soon"},
     { id: "results", label: "Results", icon: BarChart3, href: "/dashboard/my-results" },
     { id: "leaderboard", label: "Leaderboard", icon: Award, href: "/dashboard/leaderboard" },
     { id: "schedule", label: "Schedule", icon: Calendar, href: "/dashboard/schedule" },
-    { id: "Admin", label: "Admin Panel", icon: User, href: "/admin/dashboard", badge: user?.role === "admin" ? "Admin" : null },
+    { id: "Profile", label: "My Profile", icon: User, href: "/dashboard/profile" },
   ];
 
   const SidebarContent = () => (
@@ -140,9 +138,9 @@ export default function DashboardLayout({ children }) {
         {typeof window !== 'undefined' && window.innerWidth >= 768 && (
           <button
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            className={`p-1 absolute ${isSidebarOpen?"left-56":"left-15 top-1"} rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-200 hover:scale-110 flex-shrink-0 `}
+            className={`p-1 absolute ${isSidebarOpen?"left-56":"left-16 top-1"} rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-200 hover:scale-110 flex-shrink-0 `}
           >
-            {isSidebarOpen ? <ChevronLeft size={20} /> : <SquareChevronRight size={30} className="text-gray-400"/>}
+            {isSidebarOpen ? <ChevronLeft size={20} /> : <Menu size={20} className="text-gray-700 bg-stone-500/30 rounded-full p-1"/>}
           </button>
         )}
       </div>

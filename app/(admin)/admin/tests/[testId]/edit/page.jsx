@@ -13,14 +13,13 @@ import {
   BookOpen,
   Tag,
   FileText,
-  Clock,
-  Award,
   CheckSquare,
   Square,
   ArrowLeft,
   Trash2,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Globe
 } from "lucide-react";
 import { useSelector } from "react-redux";
 
@@ -38,6 +37,7 @@ export default function EditTestPage() {
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] = useState("");
   const [activeTab, setActiveTab] = useState("available");
+  const [selectedLanguage, setSelectedLanguage] = useState("en");
   
   // Pagination state
   const [pagination, setPagination] = useState({
@@ -53,6 +53,13 @@ export default function EditTestPage() {
     topic: ""
   });
 
+  // Languages configuration
+  const languages = [
+    { code: "en", name: "English", flag: "🇬🇧" },
+    { code: "hi", name: "हिंदी", flag: "🇮🇳" },
+    { code: "bn", name: "বাংলা", flag: "🇧🇩" }
+  ];
+
   // Helper function to get display name from populated field
   const getDisplayName = (field) => {
     if (!field) return "—";
@@ -61,11 +68,18 @@ export default function EditTestPage() {
     return "—";
   };
 
+  // Helper function to get localized text
+  const getLocalizedText = (textObj) => {
+    if (!textObj) return "—";
+    if (typeof textObj === 'string') return textObj;
+    return textObj[selectedLanguage] || textObj.en || "—";
+  };
+
   // Fetch test details
   const fetchTestDetails = async () => {
     try {
       const res = await fetch(
-        `https://govt-quiz-app.onrender.com/api/admin/tests/${testId}`,
+        `${process.env.NEXT_PUBLIC_API_URL}/api/admin/tests/${testId}`,
         {
           headers: { Authorization: `Bearer ${token}` }
         }
@@ -92,7 +106,7 @@ export default function EditTestPage() {
         ...(filters.topic && { topic: filters.topic }),
         testId: testId // This tells backend to exclude questions already in this test
       });
-      //console.log("Fetching questions with params:", params.toString());
+      
       const res = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/api/admin/get-questions?${params}`,
         {
@@ -213,7 +227,7 @@ export default function EditTestPage() {
         setTimeout(() => setMessage(""), 3000);
       }
     } catch (err) {
-      console.error(err);
+      console.error(err.message);
       setMessageType("error");
       setMessage("An error occurred while adding questions");
       setTimeout(() => setMessage(""), 3000);
@@ -269,7 +283,7 @@ export default function EditTestPage() {
     }
   };
 
-  // Compact Question Card Component
+  // Compact Question Card Component with language support
   const CompactQuestionCard = ({ question, index, showRemoveButton = false, onRemove, isSelected, onSelect }) => {
     return (
       <div
@@ -292,7 +306,7 @@ export default function EditTestPage() {
             )}
 
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1">
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
                 <span className="text-xs font-semibold text-purple-600 dark:text-purple-400">
                   #{index + 1}
                 </span>
@@ -300,12 +314,17 @@ export default function EditTestPage() {
                   {question.difficulty || "medium"}
                 </span>
                 <span className="text-xs text-gray-500">
-                  {question.marks || 0} mark
+                  {question.marks || 0} mark{question.marks !== 1 ? 's' : ''}
                 </span>
+                {question.negativeMarks > 0 && (
+                  <span className="text-xs text-red-500">
+                    -{question.negativeMarks} mark
+                  </span>
+                )}
               </div>
               
               <p className="text-sm text-gray-800 dark:text-white font-medium line-clamp-2">
-                {question.questionText}
+                {getLocalizedText(question.questionText)}
               </p>
               
               <div className="flex flex-wrap gap-3 mt-2 text-xs text-gray-500">
@@ -349,25 +368,43 @@ export default function EditTestPage() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <div className="max-w-5xl mx-auto px-4 py-6">
-        {/* Header */}
+        {/* Header with Language Selector */}
         <div className="mb-6">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => router.back()}
-              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition"
-            >
-              <ArrowLeft size={20} className="text-gray-600 dark:text-gray-400" />
-            </button>
-            <div className="bg-gradient-to-r from-purple-500 to-pink-500 p-2 rounded-lg">
-              <FileText className="w-5 h-5 text-white" />
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => router.back()}
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition"
+              >
+                <ArrowLeft size={20} className="text-gray-600 dark:text-gray-400" />
+              </button>
+              <div className="bg-gradient-to-r from-purple-500 to-pink-500 p-2 rounded-lg">
+                <FileText className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-800 dark:text-white">
+                  {testDetails.title}
+                </h1>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  {testDetails.duration} min • {testQuestions.length} questions • {totalMarks} marks
+                </p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-800 dark:text-white">
-                {testDetails.title}
-              </h1>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                {testDetails.duration} min • {testQuestions.length} questions • {totalMarks} marks
-              </p>
+            
+            {/* Language Selector */}
+            <div className="flex items-center gap-2">
+              <Globe size={16} className="text-gray-500" />
+              <select
+                value={selectedLanguage}
+                onChange={(e) => setSelectedLanguage(e.target.value)}
+                className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-1 focus:ring-purple-500 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 cursor-pointer"
+              >
+                {languages.map(lang => (
+                  <option key={lang.code} value={lang.code}>
+                    {lang.flag} {lang.name}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
         </div>

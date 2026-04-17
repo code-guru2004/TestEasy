@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
 import {
   Clock,
@@ -14,7 +14,7 @@ import {
   Moon,
   Sun,
   Menu,
-  FileText
+  Globe
 } from "lucide-react";
 import Image from "next/image";
 
@@ -38,6 +38,34 @@ export default function AttemptPage() {
   const [testTitle, setTestTitle] = useState("");
   const [userEmail, setUserEmail] = useState("");
   const [userId, setUserId] = useState("");
+  const [selectedLanguage, setSelectedLanguage] = useState("en");
+
+  // Languages configuration
+  const languages = [
+    { code: "en", name: "English", flag: "🇬🇧" },
+    { code: "hi", name: "हिंदी", flag: "🇮🇳" },
+    { code: "bn", name: "বাংলা", flag: "🇧🇩" }
+  ];
+
+  // Memoized helper functions to prevent re-renders
+  const getLocalizedText = useCallback((textObj) => {
+    if (!textObj) return "—";
+    if (typeof textObj === 'string') return textObj;
+    return textObj[selectedLanguage] || textObj.en || "—";
+  }, [selectedLanguage]);
+
+  const getLocalizedOptionText = useCallback((option) => {
+    if (!option) return "—";
+    if (typeof option === 'string') return option;
+    return option[selectedLanguage] || option.en || "—";
+  }, [selectedLanguage]);
+
+  // Helper function to get option text from ID
+  const getOptionTextFromId = useCallback((question, optionId) => {
+    if (!question.options || !optionId) return null;
+    const option = question.options.find(opt => opt.id === optionId);
+    return option ? getLocalizedOptionText(option) : null;
+  }, [getLocalizedOptionText]);
 
   // 🚨 SECURITY CHECK
   useEffect(() => {
@@ -82,7 +110,6 @@ export default function AttemptPage() {
         }
       );
       const data = await res.json();
-      //console.log("Test details:", data);
       setTestTitle(data.test?.title || "Test");
     } catch (err) {
       console.error(err);
@@ -90,29 +117,55 @@ export default function AttemptPage() {
   };
 
   const fetchAttempt = async () => {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/user/attempts/${attemptId}`,
-      {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/user/attempts/${attemptId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`
+          }
         }
-      }
-    );
-    const data = await res.json();
-    // console.log(data);
-    setUserEmail(data.userEmail || "");
-    setUserId(data.userId || "");
-    setQuestions(data.questions || []);
-    setCurrent(current || 0);
-    setTimeLeft(data.remainingTime);
-    setIsPaused(data.status === "paused" ? true : false);
-    // Initialize marked for review
-    const marked = data.questions
-      .filter(q => q.isMarkedForReview)
-      .map(q => q._id);
-    setMarkedForReview(marked);
+      );
+      const data = await res.json();
+      
+      setUserEmail(data.userEmail || "");
+      setUserId(data.userId || "");
+      setCurrent(data.currentQuestionIndex || 0);
+      setTimeLeft(data.remainingTime);
+      setIsPaused(data.status === "paused" ? true : false);
+      
+      // Process questions to map selectedOption IDs to text for display
+      const processedQuestions = data.questions.map(q => {
+        // Find the option text from the selectedOption ID
+        let selectedOptionText = null;
+        let selectedOptionId = q.selectedOption || null;
+        
+        if (selectedOptionId && q.options) {
+          const foundOption = q.options.find(opt => opt.id === selectedOptionId);
+          if (foundOption) {
+            selectedOptionText = foundOption.en; // Store English text as base
+          }
+        }
+        
+        return {
+          ...q,
+          selectedOption: selectedOptionText,
+          selectedOptionId: selectedOptionId
+        };
+      });
+      
+      setQuestions(processedQuestions);
+      
+      // Initialize marked for review
+      const marked = data.questions
+        .filter(q => q.isMarkedForReview)
+        .map(q => q._id);
+      setMarkedForReview(marked);
+    } catch (err) {
+      console.error("Error fetching attempt:", err);
+    }
   };
 
-  const saveAnswerToDB = async (questionId, selectedOption, isMarkedForReview, currentQuestionIndex) => {
+  const saveAnswerToDB = async (questionId, selectedOptionId, isMarkedForReview, currentQuestionIndex) => {
     if (!attemptId) return;
 
     setSavingAnswer(true);
@@ -127,7 +180,7 @@ export default function AttemptPage() {
           },
           body: JSON.stringify({
             questionId,
-            selectedOption,
+            selectedOption: selectedOptionId, // Send option ID
             isMarkedForReview,
             currentQuestionIndex,
             timeSpent: 0
@@ -149,19 +202,20 @@ export default function AttemptPage() {
     }
   };
 
-  const handleAnswer = async (questionId, answer) => {
+  const handleAnswer = async (questionId, selectedOptionId, selectedOptionText) => {
     const currentQ = questions[current];
 
     // Update local state
     const updatedQuestions = [...questions];
     updatedQuestions[current] = {
       ...currentQ,
-      selectedOption: answer
+      selectedOption: selectedOptionText,
+      selectedOptionId: selectedOptionId
     };
     setQuestions(updatedQuestions);
 
-    // Save to database
-    await saveAnswerToDB(questionId, answer, markedForReview.includes(questionId), current);
+    // Save to database with option ID
+    await saveAnswerToDB(questionId, selectedOptionId, markedForReview.includes(questionId), current);
   };
 
   const toggleMarkForReview = async (questionId) => {
@@ -175,7 +229,8 @@ export default function AttemptPage() {
 
     // Save to database
     const currentQ = questions[current];
-    await saveAnswerToDB(questionId, currentQ?.selectedOption || null, newMarked.includes(questionId), current);
+    const optionId = currentQ?.selectedOptionId || null;
+    await saveAnswerToDB(questionId, optionId, newMarked.includes(questionId), current);
   };
 
   const pauseTest = async () => {
@@ -192,10 +247,8 @@ export default function AttemptPage() {
           }
         }
       );
-      //console.log(res.ok);
       if (res.ok) {
         setIsPaused(true);
-        //alert("Test paused successfully!");
       }
     } catch (err) {
       console.error(err);
@@ -229,9 +282,10 @@ export default function AttemptPage() {
     if (current < questions.length - 1) {
       // Save current position
       if (attemptId && questions[current]) {
+        const optionId = questions[current]?.selectedOptionId || null;
         await saveAnswerToDB(
           questions[current]._id,
-          questions[current].selectedOption || null,
+          optionId,
           markedForReview.includes(questions[current]._id),
           current
         );
@@ -244,9 +298,10 @@ export default function AttemptPage() {
     if (current > 0) {
       // Save current position
       if (attemptId && questions[current]) {
+        const optionId = questions[current]?.selectedOptionId || null;
         await saveAnswerToDB(
           questions[current]._id,
-          questions[current].selectedOption || null,
+          optionId,
           markedForReview.includes(questions[current]._id),
           current
         );
@@ -258,9 +313,10 @@ export default function AttemptPage() {
   const goToQuestion = async (index) => {
     // Save current position before moving
     if (attemptId && questions[current]) {
+      const optionId = questions[current]?.selectedOptionId || null;
       await saveAnswerToDB(
         questions[current]._id,
-        questions[current].selectedOption || null,
+        optionId,
         markedForReview.includes(questions[current]._id),
         current
       );
@@ -314,7 +370,7 @@ export default function AttemptPage() {
 
   const getTimeColor = () => {
     if (timeLeft < 300) return "text-red-700 animate-pulse dark:text-red-400";
-    if (timeLeft < 600) return "text-red-600  dark:text-yellow-400";
+    if (timeLeft < 600) return "text-red-600 dark:text-yellow-400";
     return "text-gray-500 dark:text-green-400";
   };
 
@@ -322,9 +378,8 @@ export default function AttemptPage() {
     const question = questions[index];
     if (!question) return "not-visited";
 
-    // 🔥 PRIORITY FIX
     if (markedForReview.includes(question._id) && question.selectedOption) {
-      return "answered-marked"; // new state
+      return "answered-marked";
     }
 
     if (markedForReview.includes(question._id)) {
@@ -342,68 +397,20 @@ export default function AttemptPage() {
     switch (status) {
       case "answered":
         return "bg-green-500";
-
       case "marked":
         return "bg-purple-400";
-
       case "answered-marked":
-        return "bg-yellow-400"; // 🔥 special color (like real exam UI)
-
+        return "bg-yellow-400";
       case "not-answered":
         return "bg-red-400";
-
       default:
         return "bg-gray-300 dark:bg-gray-600";
     }
   };
 
-  const getStatusStyles = (status) => {
-    switch (status) {
-      case "answered":
-        return "bg-green-600 text-white [clip-path:polygon(0_0,100%_0,85%_100%,0%_100%)]";
-  
-      case "not-answered":
-        return "bg-red-600 text-white [clip-path:polygon(15%_0,100%_0,100%_100%,0%_100%)]";
-  
-      case "marked":
-        return "bg-purple-600 text-white rounded-full";
-  
-      case "answered-marked":
-        return "bg-purple-600 text-white rounded-full";
-  
-      default:
-        return "bg-gray-200 text-black border border-gray-400"; // Not visited
-    }
-  };
-  
   const currentQ = questions[current];
   const answeredCount = questions.filter(q => q.selectedOption).length;
   const progress = (answeredCount / questions.length) * 100;
-
-  // Generate watermark pattern
-  const generateWatermarkPattern = () => {
-    const pattern = [];
-    const rows = 20;
-    const cols = 6;
-    for (let i = 0; i < rows; i++) {
-      for (let j = 0; j < cols; j++) {
-        pattern.push(
-          <div
-            key={`${i}-${j}`}
-            className="text-gray-300 dark:text-gray-700 text-sm opacity-20 whitespace-nowrap"
-            style={{
-              transform: `rotate(-20deg)`,
-              fontSize: '14px',
-              fontWeight: 'bold'
-            }}
-          >
-            {userId}
-          </div>
-        );
-      }
-    }
-    return pattern;
-  };
 
   if (!currentQ) return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center">
@@ -426,7 +433,7 @@ export default function AttemptPage() {
             >
               <Menu size={20} />
             </button>
-            <div className=" p-1.5 rounded-lg">
+            <div className="p-1.5 rounded-lg">
               <Image src={"/images/exam.png"} alt="test" width={30} height={30} />
             </div>
             <div>
@@ -436,6 +443,22 @@ export default function AttemptPage() {
           </div>
 
           <div className="flex items-center gap-2 md:gap-4">
+            {/* Language Selector */}
+            <div className="flex items-center gap-2 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700">
+              <Globe size={16} className="text-gray-500" />
+              <select
+                value={selectedLanguage}
+                onChange={(e) => setSelectedLanguage(e.target.value)}
+                className="bg-transparent text-gray-700 dark:text-gray-300 text-sm focus:outline-none cursor-pointer"
+              >
+                {languages.map(lang => (
+                  <option key={lang.code} value={lang.code}>
+                    {lang.flag} {lang.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             {!isPaused && (
               <button
                 onClick={pauseTest}
@@ -472,12 +495,9 @@ export default function AttemptPage() {
       {/* Main Content */}
       <div className="flex pt-16">
         {/* Question Sidebar */}
-        <div className={`fixed left-0 top-16 bottom-0 w-72  bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transform transition-transform duration-300 z-30 overflow-y-auto ${showSidebar ? "translate-x-0" : "-translate-x-full"
-          } md:translate-x-0`}>
+        <div className={`fixed left-0 top-16 bottom-0 w-72 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transform transition-transform duration-300 z-30 overflow-y-auto ${showSidebar ? "translate-x-0" : "-translate-x-full"} md:translate-x-0`}>
           <div className="p-4 flex-col gap-2">
             <div className="mb-4 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg cursor-not-allowed">
-              
-              {/* Image */}
               <div className="flex items-center justify-center gap-3 mb-3">
                 <Image src={"/images/person.jpg"} alt="img" width={100} height={100} />
               </div>
@@ -491,7 +511,6 @@ export default function AttemptPage() {
                   Roll No: {userId}
                 </h3>
               </div>
-              {/* Separator line */}
               <hr className="border-gray-300 dark:border-gray-600 mb-3" />
               <div className="flex justify-between text-sm mb-2">
                 <span>Answered: {answeredCount}</span>
@@ -501,7 +520,8 @@ export default function AttemptPage() {
                 <span>Remaining: {questions.length - answeredCount}</span>
               </div>
             </div>
-            {/* QUestion Lists grid */}
+            
+            {/* Question Lists grid */}
             <div className="grid grid-cols-7 gap-2">
               {questions.map((q, idx) => {
                 const status = getQuestionStatus(idx);
@@ -512,17 +532,15 @@ export default function AttemptPage() {
                     key={idx}
                     onClick={() => goToQuestion(idx)}
                     className={`
-                        relative w-7 h-7 rounded-xs font-semibold text-sm
-                        transition-all duration-200
-                        ${current === idx ? "ring-2 ring-purple-600 scale-110" : ""}
-                        ${getStatusColor(status)}
-                        hover:scale-105 hover:shadow-md
-                        ${isMarked ? "border-0.5 border-purple-800" : ""}
-                      `}
+                      relative w-7 h-7 rounded-xs font-semibold text-sm
+                      transition-all duration-200
+                      ${current === idx ? "ring-2 ring-purple-600 scale-110" : ""}
+                      ${getStatusColor(status)}
+                      hover:scale-105 hover:shadow-md
+                      ${isMarked ? "border-0.5 border-purple-800" : ""}
+                    `}
                   >
                     {idx + 1}
-
-                    {/* 🔥 Small corner flag indicator */}
                     {isMarked && (
                       <span className="absolute top-0 right-0 w-2 h-2 bg-orange-500 rounded-full"></span>
                     )}
@@ -530,36 +548,29 @@ export default function AttemptPage() {
                 );
               })}
             </div>
+            
             {/* Color Instruction */}
             <div className="mt-5 pt-4 border-t border-gray-200 dark:border-gray-700 space-y-3 text-sm cursor-not-allowed">
-
               <div className="flex items-center gap-3">
                 <div className="w-4 h-4 rounded bg-green-500" />
                 <span className="text-gray-700 dark:text-gray-300">Answered</span>
               </div>
-
               <div className="flex items-center gap-3">
                 <div className="w-4 h-4 rounded bg-purple-400 border-2 border-purple-800" />
                 <span className="text-gray-700 dark:text-gray-300">Marked for Review</span>
               </div>
-
               <div className="flex items-center gap-3">
                 <div className="w-4 h-4 rounded bg-yellow-400 border-2 border-purple-800" />
-                <span className="text-gray-700 dark:text-gray-300">
-                  Answered & Marked
-                </span>
+                <span className="text-gray-700 dark:text-gray-300">Answered & Marked</span>
               </div>
-
               <div className="flex items-center gap-3">
                 <div className="w-4 h-4 rounded bg-red-500" />
                 <span className="text-gray-700 dark:text-gray-300">Not Answered</span>
               </div>
-
               <div className="flex items-center gap-3">
                 <div className="w-4 h-4 rounded bg-gray-300 dark:bg-gray-600" />
                 <span className="text-gray-700 dark:text-gray-300">Not Visited</span>
               </div>
-
             </div>
           </div>
         </div>
@@ -601,7 +612,7 @@ export default function AttemptPage() {
                     className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition ${markedForReview.includes(currentQ._id)
                       ? "bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400"
                       : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400"
-                      }`}
+                    }`}
                   >
                     <Flag size={16} />
                     <span className="text-sm">Mark for Review</span>
@@ -609,33 +620,38 @@ export default function AttemptPage() {
                 </div>
 
                 <p className="text-gray-800 dark:text-white text-lg mb-4 cursor-not-allowed">
-                  {currentQ?.questionText}
+                  {getLocalizedText(currentQ?.questionText)}
                 </p>
 
                 {/* Options */}
                 <div className="space-y-3">
-                  {currentQ?.options?.map((option, idx) => (
-                    <label
-                      key={idx}
-                      className={`flex items-center gap-3 p-4 border rounded-sm cursor-pointer transition-all hover:bg-gray-50 dark:hover:bg-gray-700 ${currentQ.selectedOption === option
-                        ? "border-blue-500 bg-blue-50 dark:bg-purple-900/20"
-                        : "border-gray-300 dark:border-gray-700"
+                  {currentQ?.options?.map((option, idx) => {
+                    const optionText = getLocalizedOptionText(option);
+                    const isChecked = currentQ.selectedOptionId === option.id;
+                    
+                    return (
+                      <label
+                        key={option.id || idx}
+                        className={`flex items-center gap-3 p-4 border rounded-sm cursor-pointer transition-all hover:bg-gray-50 dark:hover:bg-gray-700 ${isChecked
+                          ? "border-blue-500 bg-blue-50 dark:bg-purple-900/20"
+                          : "border-gray-300 dark:border-gray-700"
                         }`}
-                    >
-                      <input
-                        type="radio"
-                        name="question"
-                        value={option}
-                        checked={currentQ.selectedOption === option}
-                        onChange={(e) => handleAnswer(currentQ._id, e.target.value)}
-                        className="w-4 h-4 text-purple-600 focus:ring-purple-500"
-                        disabled={savingAnswer}
-                      />
-                      <span className="text-gray-700 dark:text-gray-300">
-                        {option}
-                      </span>
-                    </label>
-                  ))}
+                      >
+                        <input
+                          type="radio"
+                          name="question"
+                          value={option.id}
+                          checked={isChecked}
+                          onChange={(e) => handleAnswer(currentQ._id, e.target.value, optionText)}
+                          className="w-4 h-4 text-purple-600 focus:ring-purple-500"
+                          disabled={savingAnswer}
+                        />
+                        <span className="text-gray-700 dark:text-gray-300">
+                          {String.fromCharCode(65 + idx)}. {optionText}
+                        </span>
+                      </label>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -654,7 +670,7 @@ export default function AttemptPage() {
                   <button
                     onClick={submitTest}
                     disabled={submitting}
-                    className="px-6 py-2 bg-green-700 flex items-center gap-2 text-stone-50"
+                    className="px-6 py-2 bg-green-700 flex items-center gap-2 text-stone-50 rounded-lg"
                   >
                     {submitting ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
@@ -667,7 +683,7 @@ export default function AttemptPage() {
                   <button
                     onClick={nextQuestion}
                     disabled={savingAnswer}
-                    className="px-6 py-2 bg-blue-600 text-white rounded-sm hover:bg-blue-700 transition flex items-center gap-2"
+                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2"
                   >
                     Save & Next
                     <ChevronRight size={18} />

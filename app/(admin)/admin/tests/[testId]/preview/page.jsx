@@ -23,7 +23,9 @@ import {
   ChevronUp,
   Printer,
   Share2,
-  Settings
+  Settings,
+  Globe,
+  CalendarSync
 } from "lucide-react";
 
 export default function PreviewTestPage() {
@@ -35,16 +37,38 @@ export default function PreviewTestPage() {
   const [loading, setLoading] = useState(true);
   const [expandedQuestions, setExpandedQuestions] = useState({});
   const [showAnswers, setShowAnswers] = useState(false);
+  const [selectedLanguage, setSelectedLanguage] = useState("en");
+
+  // Languages configuration
+  const languages = [
+    { code: "en", name: "English", flag: "🇬🇧" },
+    { code: "hi", name: "हिंदी", flag: "🇮🇳" },
+    { code: "bn", name: "বাংলা", flag: "🇧🇩" }
+  ];
 
   useEffect(() => {
     fetchTestDetails();
   }, [testId]);
 
+  // Helper function to get localized text
+  const getLocalizedText = (textObj) => {
+    if (!textObj) return "—";
+    if (typeof textObj === 'string') return textObj;
+    return textObj[selectedLanguage] || textObj.en || "—";
+  };
+
+  // Helper function to get localized option text
+  const getLocalizedOptionText = (option) => {
+    if (!option) return "—";
+    if (typeof option === 'string') return option;
+    return option[selectedLanguage] || option.en || "—";
+  };
+
   const fetchTestDetails = async () => {
     try {
       setLoading(true);
       const res = await fetch(
-        `https://govt-quiz-app.onrender.com/api/admin/tests/${testId}`,
+        `${process.env.NEXT_PUBLIC_API_URL}/api/admin/tests/${testId}`,
         {
           headers: {
             Authorization: `Bearer ${localStorage.getItem("token")}`
@@ -113,7 +137,7 @@ export default function PreviewTestPage() {
     
     try {
       const res = await fetch(
-        `https://govt-quiz-app.onrender.com/api/admin/tests/${testId}`,
+        `${process.env.NEXT_PUBLIC_API_URL}/api/admin/tests/${testId}`,
         {
           method: "DELETE",
           headers: {
@@ -168,10 +192,21 @@ export default function PreviewTestPage() {
     ? (questions.filter(q => q.difficulty === "hard").length / questions.length) * 100 
     : 0;
 
+  // Get subject and topic names (if they're populated objects)
+  const getSubjectName = () => {
+    if (test.subject && typeof test.subject === 'object') return test.subject.name;
+    return "Not specified";
+  };
+
+  const getTopicName = () => {
+    if (test.topic && typeof test.topic === 'object') return test.topic.name;
+    return "Not specified";
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
       <div className="max-w-6xl mx-auto px-4 py-8">
-        {/* Header */}
+        {/* Header with Language Selector */}
         <div className="mb-8">
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div className="flex items-center space-x-3">
@@ -195,6 +230,22 @@ export default function PreviewTestPage() {
             </div>
             
             <div className="flex gap-3">
+              {/* Language Selector */}
+              <div className="flex items-center gap-2 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800">
+                <Globe size={16} className="text-gray-500" />
+                <select
+                  value={selectedLanguage}
+                  onChange={(e) => setSelectedLanguage(e.target.value)}
+                  className="bg-transparent text-gray-700 dark:text-gray-300 text-sm focus:outline-none cursor-pointer"
+                >
+                  {languages.map(lang => (
+                    <option key={lang.code} value={lang.code}>
+                      {lang.flag} {lang.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              
               <button
                 onClick={handlePrint}
                 className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition flex items-center gap-2"
@@ -222,7 +273,7 @@ export default function PreviewTestPage() {
 
         {/* Test Information Card */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden mb-6">
-          <div className="bg-gradient-to-r from-purple-500 to-pink-500 p-6 text-white">
+          <div className="bg-gradient-to-r from-blue-500 to-cyan-500 p-6 text-white">
             <h2 className="text-2xl font-bold mb-2">{test.title}</h2>
             <p className="text-purple-100">{test.description || "No description provided"}</p>
           </div>
@@ -261,7 +312,7 @@ export default function PreviewTestPage() {
               
               <div className="flex items-center gap-3">
                 <div className="bg-purple-100 dark:bg-purple-900/30 p-2 rounded-lg">
-                  <Calendar className="w-5 h-5 text-purple-600" />
+                  <CalendarSync  className="w-5 h-5 text-purple-600" />
                 </div>
                 <div>
                   <p className="text-sm text-gray-500 dark:text-gray-400">Max Attempts</p>
@@ -280,8 +331,8 @@ export default function PreviewTestPage() {
                 <p className="font-medium text-gray-800 dark:text-white">{formatDate(test.endTime)}</p>
               </div>
               <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Passing Percentage</p>
-                <p className="font-medium text-gray-800 dark:text-white">{test.passingPercentage || 40}%</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Test Type</p>
+                <p className="font-medium text-gray-800 dark:text-white capitalize">{test.testType || "General"}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-500 dark:text-gray-400">Negative Marking</p>
@@ -301,6 +352,9 @@ export default function PreviewTestPage() {
                 )}
                 {test.showResultImmediately && (
                   <span className="text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 px-2 py-1 rounded">Show Result Immediately</span>
+                )}
+                {test.isFeatured && (
+                  <span className="text-xs bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 px-2 py-1 rounded">Featured Test</span>
                 )}
                 {test.isPublished ? (
                   <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-2 py-1 rounded flex items-center gap-1">
@@ -399,16 +453,16 @@ export default function PreviewTestPage() {
                         )}
                       </div>
                       <p className="text-gray-800 dark:text-white font-medium">
-                        {question.questionText}
+                        {getLocalizedText(question.questionText)}
                       </p>
                       <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
                         <span className="flex items-center gap-1">
                           <BookOpen size={12} />
-                          {question.subject || "No subject"}
+                          {typeof question.subject === 'object' ? question.subject.name : "No subject"}
                         </span>
                         <span className="flex items-center gap-1">
                           <Tag size={12} />
-                          {question.topic || "No topic"}
+                          {typeof question.topic === 'object' ? question.topic.name : "No topic"}
                         </span>
                       </div>
                     </div>
@@ -421,21 +475,27 @@ export default function PreviewTestPage() {
                         <div>
                           <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Options:</p>
                           <div className="space-y-2">
-                            {question.options?.map((opt, optIdx) => (
-                              <div 
-                                key={optIdx}
-                                className={`text-sm p-2 rounded ${
-                                  showAnswers && opt === question.correctAnswer
-                                    ? "bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-300 border-l-4 border-green-500"
-                                    : "text-gray-600 dark:text-gray-400"
-                                }`}
-                              >
-                                {String.fromCharCode(65 + optIdx)}. {opt}
-                                {showAnswers && opt === question.correctAnswer && (
-                                  <span className="ml-2 text-xs text-green-600 dark:text-green-400">(Correct Answer)</span>
-                                )}
-                              </div>
-                            ))}
+                            {question.options?.map((opt, optIdx) => {
+                              const isCorrect = question.correctAnswer && 
+                                ((typeof question.correctAnswer === 'string' && opt.id === question.correctAnswer) ||
+                                 (typeof question.correctAnswer === 'string' && opt.en === question.correctAnswer));
+                              
+                              return (
+                                <div 
+                                  key={opt.id || optIdx}
+                                  className={`text-sm p-2 rounded ${
+                                    showAnswers && isCorrect
+                                      ? "bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-300 border-l-4 border-green-500"
+                                      : "text-gray-600 dark:text-gray-400"
+                                  }`}
+                                >
+                                  {String.fromCharCode(65 + optIdx)}. {getLocalizedOptionText(opt)}
+                                  {showAnswers && isCorrect && (
+                                    <span className="ml-2 text-xs text-green-600 dark:text-green-400">(Correct Answer)</span>
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
 
@@ -446,7 +506,7 @@ export default function PreviewTestPage() {
                               <Lightbulb size={16} className="text-purple-500 mt-0.5 flex-shrink-0" />
                               <div>
                                 <p className="text-xs font-semibold text-purple-600 dark:text-purple-400 mb-1">Educational Fact</p>
-                                <p className="text-sm text-gray-700 dark:text-gray-300">{question.fact}</p>
+                                <p className="text-sm text-gray-700 dark:text-gray-300">{getLocalizedText(question.fact)}</p>
                               </div>
                             </div>
                           </div>

@@ -19,11 +19,9 @@ import {
   Award,
   Target,
   BookOpen,
-  Clock,
   TrendingUp,
   Zap,
-  FileText,
-  Image as ImageIcon
+  Globe
 } from "lucide-react";
 
 export default function CreateQuestionPage() {
@@ -38,20 +36,41 @@ export default function CreateQuestionPage() {
   const [previewMode, setPreviewMode] = useState(false);
   const [selectedSubjectName, setSelectedSubjectName] = useState("");
   const [selectedTopicName, setSelectedTopicName] = useState("");
+  const [activeLanguage, setActiveLanguage] = useState("en"); // en, hi, bn
   
-  // Form state
+  // Form state with multilingual support
   const [formData, setFormData] = useState({
-    questionText: "",
+    questionText: {
+      en: "",
+      hi: "",
+      bn: ""
+    },
     questionImage: "",
-    options: ["", "", "",""],
-    correctAnswer: "",
+    options: [
+      { en: "", hi: "", bn: "" },
+      { en: "", hi: "", bn: "" },
+      { en: "", hi: "", bn: "" },
+      { en: "", hi: "", bn: "" }
+    ],
+    correctAnswer: "", // Will store the index (0-based)
     subject: "",
     topic: "",
     difficulty: "easy",
     marks: 1,
     negativeMarks: 0,
-    fact: ""
+    fact: {
+      en: "",
+      hi: "",
+      bn: ""
+    }
   });
+
+  // Languages configuration
+  const languages = [
+    { code: "en", name: "English", flag: "🇬🇧" },
+    { code: "hi", name: "हिंदी", flag: "🇮🇳" },
+    { code: "bn", name: "বাংলা", flag: "🇧🇩" }
+  ];
 
   // Fetch subjects on mount
   useEffect(() => {
@@ -124,20 +143,37 @@ export default function CreateQuestionPage() {
     fetchTopics();
   }, []);
 
+  const handleQuestionTextChange = (lang, value) => {
+    setFormData(prev => ({
+      ...prev,
+      questionText: { ...prev.questionText, [lang]: value }
+    }));
+  };
+
+  const handleOptionChange = (index, lang, value) => {
+    const newOptions = [...formData.options];
+    newOptions[index] = { ...newOptions[index], [lang]: value };
+    setFormData(prev => ({ ...prev, options: newOptions }));
+  };
+
+  const handleFactChange = (lang, value) => {
+    setFormData(prev => ({
+      ...prev,
+      fact: { ...prev.fact, [lang]: value }
+    }));
+  };
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleOptionChange = (index, value) => {
-    const newOptions = [...formData.options];
-    newOptions[index] = value;
-    setFormData(prev => ({ ...prev, options: newOptions }));
-  };
-
   const addOption = () => {
     if (formData.options.length < 6) {
-      setFormData(prev => ({ ...prev, options: [...prev.options, ""] }));
+      setFormData(prev => ({ 
+        ...prev, 
+        options: [...prev.options, { en: "", hi: "", bn: "" }] 
+      }));
     } else {
       showNotification("error", "Maximum 6 options allowed");
     }
@@ -149,8 +185,14 @@ export default function CreateQuestionPage() {
       setFormData(prev => ({ ...prev, options: newOptions }));
       
       // If removed option was the correct answer, reset correct answer
-      if (formData.correctAnswer === formData.options[index]) {
+      if (parseInt(formData.correctAnswer) === index) {
         setFormData(prev => ({ ...prev, correctAnswer: "" }));
+      } else if (parseInt(formData.correctAnswer) > index) {
+        // Adjust correct answer index if it was after the removed option
+        setFormData(prev => ({ 
+          ...prev, 
+          correctAnswer: prev.correctAnswer ? String(parseInt(prev.correctAnswer) - 1) : "" 
+        }));
       }
     } else {
       showNotification("error", "Minimum 2 options required");
@@ -201,17 +243,19 @@ export default function CreateQuestionPage() {
   };
 
   const validateForm = () => {
-    if (!formData.questionText.trim()) {
-      showNotification("error", "Question text is required");
+    // Check if at least English version of question text is provided
+    if (!formData.questionText.en.trim()) {
+      showNotification("error", "Question text (English) is required");
       return false;
     }
     
-    if (formData.options.some(opt => !opt.trim())) {
-      showNotification("error", "All options must have text");
+    // Check if all options have English text
+    if (formData.options.some(opt => !opt.en.trim())) {
+      showNotification("error", "All options must have English text");
       return false;
     }
     
-    if (!formData.correctAnswer) {
+    if (formData.correctAnswer === "") {
       showNotification("error", "Please select the correct answer");
       return false;
     }
@@ -241,20 +285,35 @@ export default function CreateQuestionPage() {
     
     setLoading(true);
     
+    // Prepare options array for API (without empty values)
+    const optionsForApi = formData.options.map(opt => ({
+      en: opt.en,
+      hi: opt.hi || "",
+      bn: opt.bn || ""
+    }));
+    
     try {
       const response = await axios.post(
         `${process.env.NEXT_PUBLIC_API_URL}/api/admin/questions`,
         {
-          questionText: formData.questionText,
+          questionText: {
+            en: formData.questionText.en,
+            hi: formData.questionText.hi || "",
+            bn: formData.questionText.bn || ""
+          },
           questionImage: formData.questionImage || undefined,
-          options: formData.options,
-          correctAnswer: formData.correctAnswer,
+          options: optionsForApi,
+          correctAnswer: parseInt(formData.correctAnswer), // Send index as number
           subject: formData.subject,
           topic: formData.topic,
           difficulty: formData.difficulty,
           marks: formData.marks,
           negativeMarks: formData.negativeMarks,
-          fact: formData.fact || undefined
+          fact: {
+            en: formData.fact.en || "",
+            hi: formData.fact.hi || "",
+            bn: formData.fact.bn || ""
+          }
         },
         {
           headers: { Authorization: `Bearer ${token}` }
@@ -265,19 +324,25 @@ export default function CreateQuestionPage() {
       
       setTimeout(() => {
         setFormData({
-          questionText: "",
+          questionText: { en: "", hi: "", bn: "" },
           questionImage: "",
-          options: ["", "", ""],
+          options: [
+            { en: "", hi: "", bn: "" },
+            { en: "", hi: "", bn: "" },
+            { en: "", hi: "", bn: "" },
+            { en: "", hi: "", bn: "" }
+          ],
           correctAnswer: "",
           subject: "",
           topic: "",
           difficulty: "easy",
           marks: 1,
           negativeMarks: 0,
-          fact: ""
+          fact: { en: "", hi: "", bn: "" }
         });
         setLoading(false);
         setPreviewMode(false);
+        setActiveLanguage("en");
       }, 2000);
       
     } catch (error) {
@@ -290,6 +355,12 @@ export default function CreateQuestionPage() {
     }
   };
 
+  // Get current language display text for preview
+  const getCurrentDisplayText = (textObj) => {
+    if (!textObj) return "";
+    return textObj[activeLanguage] || textObj.en || "";
+  };
+
   // Preview Component
   const QuestionPreview = () => (
     <div className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-gray-800 dark:to-gray-900 rounded-2xl border-2 border-purple-200 dark:border-purple-800 overflow-hidden shadow-xl">
@@ -299,12 +370,26 @@ export default function CreateQuestionPage() {
             <Eye className="text-white" size={20} />
             <h3 className="text-white font-semibold text-lg">Live Preview</h3>
           </div>
-          <button
-            onClick={() => setPreviewMode(false)}
-            className="text-white hover:text-gray-200 transition"
-          >
-            <X size={20} />
-          </button>
+          <div className="flex items-center space-x-2">
+            {/* Language selector for preview */}
+            <select
+              value={activeLanguage}
+              onChange={(e) => setActiveLanguage(e.target.value)}
+              className="bg-white/20 text-white rounded-lg px-2 py-1 text-sm border border-white/30"
+            >
+              {languages.map(lang => (
+                <option key={lang.code} value={lang.code} className="text-gray-900">
+                  {lang.flag} {lang.name}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={() => setPreviewMode(false)}
+              className="text-white hover:text-gray-200 transition"
+            >
+              <X size={20} />
+            </button>
+          </div>
         </div>
       </div>
       
@@ -335,15 +420,17 @@ export default function CreateQuestionPage() {
             </div>
           </div>
           <div className="flex items-center space-x-2">
-            <BookOpen size={16} className="text-gray-400" />
-            <span className="text-sm text-gray-500 dark:text-gray-400">Question Bank</span>
+            <Globe size={16} className="text-gray-400" />
+            <span className="text-sm text-gray-500 dark:text-gray-400">
+              {languages.find(l => l.code === activeLanguage)?.name}
+            </span>
           </div>
         </div>
 
         {/* Question Text */}
         <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm">
           <p className="text-gray-800 dark:text-gray-200 text-lg font-medium">
-            {formData.questionText || "Question text will appear here..."}
+            {getCurrentDisplayText(formData.questionText) || "Question text will appear here..."}
           </p>
           {formData.questionImage && (
             <div className="mt-4">
@@ -360,25 +447,27 @@ export default function CreateQuestionPage() {
         <div className="space-y-3">
           <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Select your answer:</p>
           {formData.options.map((option, index) => (
-            option && (
+            option.en && (
               <div 
                 key={index}
                 className={`p-4 rounded-xl border-2 transition-all ${
-                  formData.correctAnswer === option
+                  parseInt(formData.correctAnswer) === index
                     ? "border-green-500 bg-green-50 dark:bg-green-900/20"
                     : "border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-purple-300 dark:hover:border-purple-700"
                 }`}
               >
                 <div className="flex items-center space-x-3">
                   <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                    formData.correctAnswer === option
+                    parseInt(formData.correctAnswer) === index
                       ? "bg-green-500 text-white"
                       : "bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400"
                   }`}>
                     {String.fromCharCode(65 + index)}
                   </div>
-                  <span className="text-gray-800 dark:text-gray-200">{option}</span>
-                  {formData.correctAnswer === option && (
+                  <span className="text-gray-800 dark:text-gray-200">
+                    {getCurrentDisplayText(option)}
+                  </span>
+                  {parseInt(formData.correctAnswer) === index && (
                     <CheckCircle size={16} className="text-green-500 ml-auto" />
                   )}
                 </div>
@@ -388,13 +477,15 @@ export default function CreateQuestionPage() {
         </div>
 
         {/* Fun Fact */}
-        {formData.fact && (
+        {formData.fact.en && (
           <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-200 dark:border-blue-800">
             <div className="flex items-start space-x-2">
               <Zap size={18} className="text-blue-600 dark:text-blue-400 mt-0.5" />
               <div>
                 <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wide">Did You Know?</p>
-                <p className="text-sm text-blue-800 dark:text-blue-300 mt-1">{formData.fact}</p>
+                <p className="text-sm text-blue-800 dark:text-blue-300 mt-1">
+                  {getCurrentDisplayText(formData.fact)}
+                </p>
               </div>
             </div>
           </div>
@@ -405,7 +496,7 @@ export default function CreateQuestionPage() {
           <div className="flex items-center justify-between text-sm text-gray-500 dark:text-gray-400">
             <div className="flex items-center space-x-4">
               <span>✓ Valid question</span>
-              <span>• {formData.options.filter(opt => opt).length} options</span>
+              <span>• {formData.options.filter(opt => opt.en).length} options</span>
             </div>
             <div className="flex items-center space-x-2">
               <Target size={14} />
@@ -445,7 +536,7 @@ export default function CreateQuestionPage() {
                 Create New Question
               </h1>
               <p className="mt-2 text-gray-600 dark:text-gray-400">
-                Build your question bank with detailed questions and answers
+                Build your question bank with multilingual support
               </p>
             </div>
             <div className="flex items-center space-x-3">
@@ -499,24 +590,43 @@ export default function CreateQuestionPage() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Question Text */}
+              {/* Question Text with Language Tabs */}
               <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 hover:shadow-md transition">
                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
                   Question Text <span className="text-red-500">*</span>
                 </label>
+                
+                {/* Language Tabs */}
+                <div className="flex space-x-2 mb-4 border-b border-gray-200 dark:border-gray-700">
+                  {languages.map(lang => (
+                    <button
+                      key={lang.code}
+                      type="button"
+                      onClick={() => setActiveLanguage(lang.code)}
+                      className={`px-4 py-2 text-sm font-medium transition-all ${
+                        activeLanguage === lang.code
+                          ? "text-purple-600 border-b-2 border-purple-600 dark:text-purple-400 dark:border-purple-400"
+                          : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+                      }`}
+                    >
+                      {lang.flag} {lang.name}
+                      {lang.code === "en" && <span className="text-red-500 ml-1">*</span>}
+                    </button>
+                  ))}
+                </div>
+                
                 <textarea
-                  name="questionText"
-                  value={formData.questionText}
-                  onChange={handleInputChange}
+                  value={formData.questionText[activeLanguage]}
+                  onChange={(e) => handleQuestionTextChange(activeLanguage, e.target.value)}
                   rows={3}
                   className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white resize-none"
-                  placeholder="Type your question here..."
-                  required
+                  placeholder={`Type your question in ${languages.find(l => l.code === activeLanguage)?.name}...`}
+                  required={activeLanguage === "en"}
                 />
               </div>
 
               {/* Question Image */}
-              {/* <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 hover:shadow-md transition">
+              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 hover:shadow-md transition">
                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
                   Question Image <span className="text-gray-400 text-xs font-normal">(Optional)</span>
                 </label>
@@ -555,9 +665,9 @@ export default function CreateQuestionPage() {
                     />
                   </label>
                 )}
-              </div> */}
+              </div>
 
-              {/* Options */}
+              {/* Options with Language Support */}
               <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 hover:shadow-md transition">
                 <div className="flex justify-between items-center mb-4">
                   <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
@@ -573,6 +683,25 @@ export default function CreateQuestionPage() {
                   </button>
                 </div>
                 
+                {/* Language tabs for options */}
+                <div className="flex space-x-2 mb-4 border-b border-gray-200 dark:border-gray-700">
+                  {languages.map(lang => (
+                    <button
+                      key={lang.code}
+                      type="button"
+                      onClick={() => setActiveLanguage(lang.code)}
+                      className={`px-3 py-1 text-xs font-medium transition-all ${
+                        activeLanguage === lang.code
+                          ? "text-purple-600 border-b-2 border-purple-600 dark:text-purple-400 dark:border-purple-400"
+                          : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+                      }`}
+                    >
+                      {lang.flag} {lang.name}
+                      {lang.code === "en" && <span className="text-red-500 ml-1">*</span>}
+                    </button>
+                  ))}
+                </div>
+                
                 <div className="space-y-3">
                   {formData.options.map((option, index) => (
                     <div key={index} className="flex items-center space-x-3 group">
@@ -582,11 +711,11 @@ export default function CreateQuestionPage() {
                       <div className="flex-1">
                         <input
                           type="text"
-                          value={option}
-                          onChange={(e) => handleOptionChange(index, e.target.value)}
+                          value={option[activeLanguage]}
+                          onChange={(e) => handleOptionChange(index, activeLanguage, e.target.value)}
                           className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                          placeholder={`Enter option ${String.fromCharCode(65 + index)}`}
-                          required
+                          placeholder={`Enter option ${String.fromCharCode(65 + index)} in ${languages.find(l => l.code === activeLanguage)?.name}`}
+                          required={activeLanguage === "en"}
                         />
                       </div>
                       <button
@@ -618,14 +747,14 @@ export default function CreateQuestionPage() {
                 >
                   <option value="">Select the correct answer</option>
                   {formData.options.map((option, index) => (
-                    option && (
-                      <option key={index} value={option}>
-                        {String.fromCharCode(65 + index)}. {option}
+                    option.en && (
+                      <option key={index} value={index}>
+                        {String.fromCharCode(65 + index)}. {option.en}
                       </option>
                     )
                   ))}
                 </select>
-                {formData.correctAnswer && (
+                {formData.correctAnswer !== "" && (
                   <p className="text-xs text-green-600 dark:text-green-400 mt-2">
                     ✓ Correct answer selected
                   </p>
@@ -738,18 +867,36 @@ export default function CreateQuestionPage() {
                 </div>
               </div>
 
-              {/* Fun Fact */}
+              {/* Fun Fact with Language Support */}
               <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 hover:shadow-md transition">
                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
                   Fun Fact <span className="text-gray-400 text-xs font-normal">(Optional)</span>
                 </label>
+                
+                {/* Language tabs for fact */}
+                <div className="flex space-x-2 mb-4 border-b border-gray-200 dark:border-gray-700">
+                  {languages.map(lang => (
+                    <button
+                      key={lang.code}
+                      type="button"
+                      onClick={() => setActiveLanguage(lang.code)}
+                      className={`px-3 py-1 text-xs font-medium transition-all ${
+                        activeLanguage === lang.code
+                          ? "text-purple-600 border-b-2 border-purple-600 dark:text-purple-400 dark:border-purple-400"
+                          : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+                      }`}
+                    >
+                      {lang.flag} {lang.name}
+                    </button>
+                  ))}
+                </div>
+                
                 <textarea
-                  name="fact"
-                  value={formData.fact}
-                  onChange={handleInputChange}
+                  value={formData.fact[activeLanguage]}
+                  onChange={(e) => handleFactChange(activeLanguage, e.target.value)}
                   rows={2}
                   className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white resize-none"
-                  placeholder="Add an interesting fact to engage students..."
+                  placeholder={`Add an interesting fact in ${languages.find(l => l.code === activeLanguage)?.name}...`}
                 />
               </div>
 

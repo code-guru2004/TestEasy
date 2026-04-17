@@ -98,7 +98,7 @@ export default function AdminTestsPage() {
     if (confirm(`Are you sure you want to delete "${testTitle}"?`)) {
       try {
         const res = await fetch(
-          `https://govt-quiz-app.onrender.com/api/admin/tests/${testId}`,
+          `${process.env.NEXT_PUBLIC_API_URL}/api/tests/${testId}`,
           {
             method: "DELETE",
             headers: {

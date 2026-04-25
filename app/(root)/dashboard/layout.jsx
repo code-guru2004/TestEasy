@@ -148,7 +148,7 @@ export default function DashboardLayout({ children }) {
         )}
       </div>
 
-      <nav className="flex-1  py-6 px-4 space-y-2">
+      <nav className="flex-1 py-2 px-4 space-y-2 ">
         {navItems.map((item) => (
           <Link
             key={item.id}
@@ -167,7 +167,7 @@ export default function DashboardLayout({ children }) {
               {item.label}
             </span>
             {isSidebarOpen && item.badge && (
-              <span className={`ml-auto bg-red-500 text-white text-xs px-2 py-1 rounded-full transition-all duration-300 ${
+              <span className={`ml-auto bg-red-500 text-white text-xs px-2 py-1 z-50 rounded-full transition-all duration-300 ${
                 isSidebarOpen ? "opacity-100 scale-100" : "opacity-0 scale-0"
               }`}>
                 {item.badge}

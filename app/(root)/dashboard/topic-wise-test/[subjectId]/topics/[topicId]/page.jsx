@@ -100,7 +100,7 @@ const addBookmark = async (testId) => {
 
   const getButtonConfig = (test) => {
     if (test.canResume) return { text: "Resume Test", variant: "warning" };
-    if (test.canStart && test.attemptCount > 1) return { text: "Re-attempt", variant: "primary" };
+    if (test.canStart && test.attemptCount >= 1) return { text: "Re-attempt", variant: "primary" };
     if (test.canStart) return { text: "Start Test", variant: "primary" };
     if (test.canViewResult) return { text: "View Result", variant: "success" };
     return { text: "Not Available", disabled: true };

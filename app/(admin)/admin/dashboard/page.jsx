@@ -144,13 +144,13 @@ export default function AdminDashboard() {
       gradient: "from-rose-600 to-red-600"
     },
     {
-      title: "Question Bank",
+      title: "Question Bulk",
       description: "Manage all questions, edit existing ones, and organize your question database",
       icon: Database,
       color: "from-cyan-500 to-cyan-600",
       bgColor: "bg-cyan-50 dark:bg-cyan-900/20",
       iconColor: "text-cyan-600",
-      path: "/dashboard/admin/questions",
+      path: "/admin/bulk-questions",
       stats: `${stats.totalQuestions} Questions Available`,
       gradient: "from-cyan-600 to-blue-600"
     }

@@ -25,7 +25,8 @@ import {
   Medal,
   Crown,
   Trophy,
-  Globe
+  Globe,
+  Layers
 } from "lucide-react";
 
 export default function TestResultPage() {
@@ -39,32 +40,28 @@ export default function TestResultPage() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("details");
   const [leaderboard, setLeaderboard] = useState([]);
-  const [answerFilter, setAnswerFilter] = useState("all"); // all, correct, incorrect
+  const [answerFilter, setAnswerFilter] = useState("all");
   const [expandedAnswers, setExpandedAnswers] = useState({});
   const [selectedLanguage, setSelectedLanguage] = useState("en");
 
-  // Languages configuration
   const languages = [
     { code: "en", name: "English", flag: "🇬🇧" },
     { code: "hi", name: "हिंदी", flag: "🇮🇳" },
     { code: "bn", name: "বাংলা", flag: "🇧🇩" }
   ];
 
-  // Helper function to get localized text
   const getLocalizedText = useCallback((textObj) => {
     if (!textObj) return "—";
     if (typeof textObj === 'string') return textObj;
     return textObj[selectedLanguage] || textObj.en || "—";
   }, [selectedLanguage]);
 
-  // Helper function to get localized option text from option object
   const getLocalizedOptionText = useCallback((option) => {
     if (!option) return "—";
     if (typeof option === 'string') return option;
     return option[selectedLanguage] || option.en || "—";
   }, [selectedLanguage]);
 
-  // Helper function to get option text by ID
   const getOptionTextById = useCallback((options, optionId) => {
     if (!options || !optionId) return null;
     const option = options.find(opt => opt.id === optionId);
@@ -79,7 +76,6 @@ export default function TestResultPage() {
     }
   }, [attemptId, testId]);
 
-  // Refetch when page becomes visible
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
@@ -105,9 +101,28 @@ export default function TestResultPage() {
         }
       );
       const data = await res.json();
+      
+      if (data) {
+        // Ensure data structure is consistent
+        if (data.hasSections === undefined) {
+          data.hasSections = data.sections && data.sections.length > 0;
+        }
+        if (!data.sections) data.sections = [];
+        if (!data.questions) data.questions = [];
+        if (!data.summary) {
+          data.summary = {
+            score: data.score || 0,
+            totalMarks: data.totalMarks || 0,
+            totalQuestions: data.totalQuestions || 0,
+            attemptedAt: new Date().toISOString()
+          };
+        }
+      }
+      
       setResult(data);
     } catch (err) {
-      console.error(err);
+      console.error("Error fetching result:", err);
+      setResult(null);
     } finally {
       setLoading(false);
     }
@@ -147,14 +162,16 @@ export default function TestResultPage() {
     }
   };
 
-  const toggleAnswerExpand = (index) => {
+  const toggleAnswerExpand = (sectionIdx, questionIdx) => {
+    const key = `${sectionIdx}-${questionIdx}`;
     setExpandedAnswers(prev => ({
       ...prev,
-      [index]: !prev[index]
+      [key]: !prev[key]
     }));
   };
 
   const calculatePercentage = (score, totalMarks) => {
+    if (!totalMarks || totalMarks === 0) return "0";
     return ((score / totalMarks) * 100).toFixed(2);
   };
 
@@ -169,39 +186,110 @@ export default function TestResultPage() {
     });
   };
 
-  // Process questions with localized text
-  const processedQuestions = result?.questions?.map(q => ({
-    ...q,
-    localizedQuestionText: getLocalizedText(q.questionText),
-    localizedOptions: q.options?.map(opt => ({
-      ...opt,
-      localizedText: getLocalizedOptionText(opt)
-    })),
-    selectedOptionText: getOptionTextById(q.options, q.selectedOption),
-    correctAnswerText: getOptionTextById(q.options, q.correctAnswer)
-  })) || [];
+  // FIXED: Properly extract all questions from both sectional and non-sectional responses
+  const getAllQuestions = () => {
+    if (!result) return [];
+    
+    // Handle sectional test (hasSections = true)
+    if (result.hasSections === true && result.sections && Array.isArray(result.sections) && result.sections.length > 0) {
+      const allQuestions = [];
+      result.sections.forEach((section, sectionIdx) => {
+        // Check if section has questions array
+        if (section.questions && Array.isArray(section.questions)) {
+          section.questions.forEach((question, questionIdx) => {
+            allQuestions.push({
+              ...question,
+              sectionIndex: section.sectionIndex !== undefined ? section.sectionIndex : sectionIdx,
+              sectionTitle: section.sectionTitle || `Section ${sectionIdx + 1}`,
+              sectionIdx,
+              questionIdx
+            });
+          });
+        }
+        // Also handle if section has answers array (backward compatibility)
+        else if (section.answers && Array.isArray(section.answers)) {
+          section.answers.forEach((answer, questionIdx) => {
+            allQuestions.push({
+              ...answer,
+              sectionIndex: section.sectionIndex !== undefined ? section.sectionIndex : sectionIdx,
+              sectionTitle: section.sectionTitle || `Section ${sectionIdx + 1}`,
+              sectionIdx,
+              questionIdx
+            });
+          });
+        }
+      });
+      return allQuestions;
+    } 
+    // Handle non-sectional test (hasSections = false or no sections)
+    else if (result.questions && Array.isArray(result.questions) && result.questions.length > 0) {
+      return result.questions.map((q, idx) => ({
+        ...q,
+        sectionIndex: null,
+        sectionTitle: null,
+        sectionIdx: 0,
+        questionIdx: idx
+      }));
+    }
+    
+    return [];
+  };
 
-  // Pie chart data
-  const correctCount = processedQuestions.filter(q => q.isCorrect === true).length || 0;
-  const wrongCount = processedQuestions.filter(q => q.isCorrect === false).length || 0;
-  const unattemptedCount = processedQuestions.filter(q => !q.selectedOption).length || 0;
-  const totalQuestions = processedQuestions.length || 0;
+  const allQuestions = getAllQuestions();
+  const hasSections = result?.hasSections === true || (result?.sections && result.sections.length > 0);
+  
+  // Calculate statistics
+  const correctCount = allQuestions.filter(q => q?.isCorrect === true).length || 0;
+  const wrongCount = allQuestions.filter(q => q?.isCorrect === false).length || 0;
+  const unattemptedCount = allQuestions.filter(q => !q?.selectedOption || q?.status === "unattempted").length || 0;
+  const totalQuestions = allQuestions.length || result?.totalQuestions || 0;
   
   const correctPercentage = totalQuestions ? (correctCount / totalQuestions) * 100 : 0;
   const wrongPercentage = totalQuestions ? (wrongCount / totalQuestions) * 100 : 0;
   const unattemptedPercentage = totalQuestions ? (unattemptedCount / totalQuestions) * 100 : 0;
 
-  // Filter answers based on selection
   const getFilteredAnswers = () => {
-    if (!processedQuestions) return [];
-    return processedQuestions.filter(q => {
+    if (!allQuestions.length) return [];
+    return allQuestions.filter(q => {
       if (answerFilter === "correct") return q.isCorrect === true;
-      if (answerFilter === "incorrect") return q.isCorrect === false;
+      if (answerFilter === "incorrect") return q.isCorrect === false || (!q.selectedOption || q.status === "unattempted");
       return true;
     });
   };
 
   const filteredAnswers = getFilteredAnswers();
+
+  // FIXED: Properly calculate section stats from sectional test data
+  const getSectionStats = () => {
+    if (!hasSections || !result?.sections || !Array.isArray(result.sections) || result.sections.length === 0) return [];
+    
+    return result.sections.map(section => {
+      const sectionQuestions = section.questions || section.answers || [];
+      const correct = sectionQuestions.filter(q => q.isCorrect === true).length;
+      const wrong = sectionQuestions.filter(q => q.isCorrect === false).length;
+      const unattempted = sectionQuestions.filter(q => !q.selectedOption || q.status === "unattempted").length;
+      const score = sectionQuestions.reduce((sum, q) => sum + (q.marksObtained || 0), 0);
+      // Calculate total marks based on questions in section
+      const totalMarks = sectionQuestions.reduce((sum, q) => {
+        // Assuming each question has marksObtained property or default to 2
+        return sum + (q.marks || 2);
+      }, 0);
+      
+      return {
+        title: section.sectionTitle || `Section ${(section.sectionIndex !== undefined ? section.sectionIndex : 0) + 1}`,
+        index: section.sectionIndex !== undefined ? section.sectionIndex : 0,
+        correct,
+        wrong,
+        unattempted,
+        score,
+        totalMarks: totalMarks || section.totalMarks || (sectionQuestions.length * 2),
+        totalQuestions: sectionQuestions.length,
+        percentage: totalMarks ? ((score / totalMarks) * 100).toFixed(2) : 0
+      };
+    });
+  };
+
+  const sectionStats = getSectionStats();
 
   if (loading) {
     return (
@@ -225,14 +313,16 @@ export default function TestResultPage() {
             onClick={() => router.push("/dashboard")}
             className="mt-6 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
           >
-            Back Dashboard
+            Back to Dashboard
           </button>
         </div>
       </div>
     );
   }
 
-  const percentage = calculatePercentage(result.score, result.totalMarks);
+  const score = result.summary?.score || result.score || 0;
+  const totalMarks = result.summary?.totalMarks || result.totalMarks || 0;
+  const percentage = calculatePercentage(score, totalMarks);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -248,7 +338,6 @@ export default function TestResultPage() {
               Back to Dashboard
             </button>
             
-            {/* Language Selector */}
             <div className="flex items-center gap-2 px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800">
               <Globe size={16} className="text-gray-500" />
               <select
@@ -275,8 +364,14 @@ export default function TestResultPage() {
                   Test Results
                 </h1>
                 <p className="text-gray-600 dark:text-gray-300 mt-1">
-                  {testDetails?.title || "Assessment"} • Completed on {formatDate(new Date())}
+                  {testDetails?.title || "Assessment"} • Completed on {formatDate(result.summary?.attemptedAt || new Date())}
                 </p>
+                {hasSections && (
+                  <span className="inline-flex items-center gap-1 mt-1 text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 px-2 py-0.5 rounded-full">
+                    <Layers size={12} />
+                    Sectional Test
+                  </span>
+                )}
               </div>
             </div>
             
@@ -292,15 +387,15 @@ export default function TestResultPage() {
 
         {/* Score Overview Card */}
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden mb-6">
-          <div className="bg-blue-50 dark:bg-blue-900/20 p-6 border-b border-gray-200 dark:border-gray-700">
+          <div className="bg-gradient-to-r from-blue-500 to-purple-600 p-6">
             <div className="flex items-center justify-between flex-wrap gap-4">
               <div>
-                <h2 className="text-xl font-semibold text-gray-800 dark:text-white mb-1">Your Score</h2>
-                <p className="text-gray-600 dark:text-gray-300 text-sm">Here's how you performed on this test</p>
+                <h2 className="text-xl font-semibold text-white mb-1">Your Score</h2>
+                <p className="text-blue-100 text-sm">Here's how you performed on this test</p>
               </div>
               <div className="text-right">
-                <div className="text-4xl font-bold text-gray-800 dark:text-white">{result.score} / {result.totalMarks}</div>
-                <div className="text-gray-600 dark:text-gray-300">{percentage}%</div>
+                <div className="text-4xl font-bold text-white">{score} / {totalMarks}</div>
+                <div className="text-blue-100">{percentage}%</div>
               </div>
             </div>
           </div>
@@ -340,7 +435,6 @@ export default function TestResultPage() {
               </div>
             </div>
 
-            {/* Performance Bar */}
             <div className="mt-4">
               <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400 mb-2">
                 <span>Performance</span>
@@ -348,13 +442,59 @@ export default function TestResultPage() {
               </div>
               <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                 <div 
-                  className="h-full bg-blue-600 rounded-full transition-all duration-1000"
+                  className="h-full bg-gradient-to-r from-blue-500 to-purple-600 rounded-full transition-all duration-1000"
                   style={{ width: `${percentage}%` }}
                 />
               </div>
             </div>
           </div>
         </div>
+
+        {/* Section-wise Performance - Only for sectional tests */}
+        {hasSections && sectionStats.length > 0 && (
+          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden mb-6">
+            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+              <div className="flex items-center gap-2">
+                <Layers className="w-5 h-5 text-purple-600" />
+                <h2 className="text-lg font-semibold text-gray-800 dark:text-white">Section-wise Performance</h2>
+              </div>
+            </div>
+            <div className="p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {sectionStats.map((section, idx) => (
+                  <div key={idx} className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="font-semibold text-gray-800 dark:text-white">{section.title}</h3>
+                      <span className="text-sm font-medium text-blue-600 dark:text-blue-400">
+                        {section.score}/{section.totalMarks} ({section.percentage}%)
+                      </span>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600 dark:text-gray-400">Correct</span>
+                        <span className="text-green-600 dark:text-green-400">{section.correct}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600 dark:text-gray-400">Wrong</span>
+                        <span className="text-red-600 dark:text-red-400">{section.wrong}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600 dark:text-gray-400">Unattempted</span>
+                        <span className="text-gray-600 dark:text-gray-400">{section.unattempted}</span>
+                      </div>
+                    </div>
+                    <div className="mt-3 h-2 bg-gray-200 dark:bg-gray-600 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-purple-500 rounded-full"
+                        style={{ width: `${section.percentage}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Tabs */}
         <div className="border-b border-gray-200 dark:border-gray-700 mb-6">
@@ -385,7 +525,6 @@ export default function TestResultPage() {
         {/* Tab 1: Attempt Details */}
         {activeTab === "details" && (
           <div className="space-y-6">
-            {/* Basic Test Details */}
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
               <div className="p-6 border-b border-gray-200 dark:border-gray-700">
                 <h2 className="text-lg font-semibold text-gray-800 dark:text-white">Test Information</h2>
@@ -417,14 +556,13 @@ export default function TestResultPage() {
                     <Calendar className="w-5 h-5 text-gray-500" />
                     <div>
                       <p className="text-sm text-gray-500 dark:text-gray-400">Submitted At</p>
-                      <p className="font-medium text-gray-800 dark:text-white">{formatDate(new Date())}</p>
+                      <p className="font-medium text-gray-800 dark:text-white">{formatDate(result.summary?.attemptedAt || new Date())}</p>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Pie Chart */}
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
               <div className="p-6 border-b border-gray-200 dark:border-gray-700">
                 <div className="flex items-center gap-2">
@@ -434,7 +572,6 @@ export default function TestResultPage() {
               </div>
               <div className="p-6">
                 <div className="flex flex-col md:flex-row items-center justify-around gap-8">
-                  {/* Simple Pie Chart using CSS conic-gradient */}
                   <div className="relative w-48 h-48">
                     <div 
                       className="w-full h-full rounded-full shadow-md"
@@ -454,7 +591,6 @@ export default function TestResultPage() {
                     </div>
                   </div>
 
-                  {/* Legend */}
                   <div className="space-y-3">
                     <div className="flex items-center gap-3">
                       <div className="w-4 h-4 rounded-full bg-green-500" />
@@ -473,7 +609,6 @@ export default function TestResultPage() {
               </div>
             </div>
 
-            {/* My Answers Section */}
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
               <div className="p-6 border-b border-gray-200 dark:border-gray-700">
                 <div className="flex items-center justify-between flex-wrap gap-4">
@@ -482,7 +617,6 @@ export default function TestResultPage() {
                     <h2 className="text-lg font-semibold text-gray-800 dark:text-white">My Answers</h2>
                   </div>
                   
-                  {/* Filter Dropdown */}
                   <div className="flex items-center gap-2">
                     <Filter size={16} className="text-gray-500" />
                     <select
@@ -492,7 +626,7 @@ export default function TestResultPage() {
                     >
                       <option value="all">All Questions</option>
                       <option value="correct">Correct Answers</option>
-                      <option value="incorrect">Incorrect Answers</option>
+                      <option value="incorrect">Incorrect & Unattempted</option>
                     </select>
                   </div>
                 </div>
@@ -508,18 +642,21 @@ export default function TestResultPage() {
                     <p className="text-gray-500 dark:text-gray-400">No questions match the selected filter</p>
                   </div>
                 ) : (
-                  filteredAnswers.map((q, index) => {
-                    const originalIndex = processedQuestions.findIndex(orig => orig.questionId === q.questionId);
+                  filteredAnswers.map((q, idx) => {
+                    const questionNumber = idx + 1;
+                    const sectionName = q.sectionTitle ? `${q.sectionTitle} - ` : "";
+                    const isUnattempted = !q.selectedOption || q.status === "unattempted";
+                    
                     return (
-                      <div key={index} className="p-6">
+                      <div key={idx} className="p-6">
                         <button
-                          onClick={() => toggleAnswerExpand(originalIndex)}
+                          onClick={() => toggleAnswerExpand(q.sectionIdx, q.questionIdx)}
                           className="w-full text-left flex items-start justify-between gap-4"
                         >
                           <div className="flex-1">
                             <div className="flex items-center gap-2 mb-2 flex-wrap">
                               <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-                                Question {originalIndex + 1}
+                                {sectionName}Question {questionNumber}
                               </span>
                               {q.isCorrect === true && (
                                 <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-2 py-0.5 rounded-full flex items-center gap-1">
@@ -527,38 +664,44 @@ export default function TestResultPage() {
                                   Correct
                                 </span>
                               )}
-                              {q.isCorrect === false && (
+                              {q.isCorrect === false && q.selectedOption && (
                                 <span className="text-xs bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 px-2 py-0.5 rounded-full flex items-center gap-1">
                                   <XCircle size={12} />
                                   Wrong
                                 </span>
                               )}
-                              {!q.selectedOption && (
-                                <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 px-2 py-0.5 rounded-full">
+                              {isUnattempted && (
+                                <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                  <AlertCircle size={12} />
                                   Unattempted
+                                </span>
+                              )}
+                              {q.marksObtained > 0 && (
+                                <span className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 px-2 py-0.5 rounded-full">
+                                  +{q.marksObtained} marks
                                 </span>
                               )}
                             </div>
                             <p className="text-gray-800 dark:text-white font-medium">
-                              {q.localizedQuestionText}
+                              {getLocalizedText(q.questionText)}
                             </p>
                             <div className="mt-2 text-sm">
                               <span className="text-gray-500">Your answer: </span>
                               <span className={q.isCorrect ? "text-green-600 dark:text-green-400 font-medium" : "text-red-600 dark:text-red-400 font-medium"}>
-                                {q.selectedOptionText || "Not answered"}
+                                {getOptionTextById(q.options, q.selectedOption) || "Not answered"}
                               </span>
                             </div>
                           </div>
-                          {expandedAnswers[originalIndex] ? <ChevronUp size={20} className="text-gray-500" /> : <ChevronDown size={20} className="text-gray-500" />}
+                          {expandedAnswers[`${q.sectionIdx}-${q.questionIdx}`] ? <ChevronUp size={20} className="text-gray-500" /> : <ChevronDown size={20} className="text-gray-500" />}
                         </button>
                         
-                        {expandedAnswers[originalIndex] && (
+                        {expandedAnswers[`${q.sectionIdx}-${q.questionIdx}`] && (
                           <div className="mt-4 pl-4 border-l-4 border-gray-300 dark:border-gray-600">
                             <div className="space-y-3">
                               <div>
                                 <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">All Options:</p>
                                 <div className="space-y-2">
-                                  {q.localizedOptions?.map((opt, optIdx) => {
+                                  {q.options?.map((opt, optIdx) => {
                                     const isSelected = opt.id === q.selectedOption;
                                     const isCorrect = opt.id === q.correctAnswer;
                                     
@@ -567,27 +710,46 @@ export default function TestResultPage() {
                                         key={opt.id || optIdx}
                                         className={`text-sm p-2 rounded ${
                                           isCorrect 
-                                            ? "bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-300"
+                                            ? "bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-300 border-l-4 border-green-500"
                                             : isSelected && !isCorrect
-                                            ? "bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-300"
+                                            ? "bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-300 border-l-4 border-red-500"
                                             : "text-gray-600 dark:text-gray-400"
                                         }`}
                                       >
-                                        {String.fromCharCode(65 + optIdx)}. {opt.localizedText}
+                                        {String.fromCharCode(65 + optIdx)}. {getLocalizedOptionText(opt)}
                                         {isCorrect && (
-                                          <span className="ml-2 text-xs text-green-600 dark:text-green-400">(Correct Answer)</span>
+                                          <span className="ml-2 text-xs text-green-600 dark:text-green-400 font-medium">✓ Correct Answer</span>
                                         )}
                                         {isSelected && !isCorrect && (
-                                          <span className="ml-2 text-xs text-red-600 dark:text-red-400">(Your Answer)</span>
+                                          <span className="ml-2 text-xs text-red-600 dark:text-red-400 font-medium">✗ Your Answer</span>
                                         )}
                                         {isSelected && isCorrect && (
-                                          <span className="ml-2 text-xs text-green-600 dark:text-green-400">(Your Answer ✓)</span>
+                                          <span className="ml-2 text-xs text-green-600 dark:text-green-400 font-medium">✓ Your Answer (Correct)</span>
                                         )}
                                       </div>
                                     );
                                   })}
                                 </div>
                               </div>
+                              
+                              {/* Show correct answer explanation for wrong/unattempted questions */}
+                              {(q.isCorrect === false || isUnattempted) && q.correctAnswer && (
+                                <div className="mt-3 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border-l-4 border-green-500">
+                                  <p className="text-sm font-semibold text-green-700 dark:text-green-400 mb-1">✅ Correct Answer:</p>
+                                  <p className="text-sm text-green-600 dark:text-green-300">
+                                    {getOptionTextById(q.options, q.correctAnswer)}
+                                  </p>
+                                </div>
+                              )}
+                              
+                              {q.fact && (
+                                <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border-l-4 border-blue-500">
+                                  <p className="text-sm font-semibold text-blue-700 dark:text-blue-400 mb-1">💡 Did you know?</p>
+                                  <p className="text-sm text-blue-600 dark:text-blue-300">
+                                    {getLocalizedText(q.fact)}
+                                  </p>
+                                </div>
+                              )}
                             </div>
                           </div>
                         )}
@@ -613,7 +775,6 @@ export default function TestResultPage() {
               </p>
             </div>
 
-            {/* Top 3 Rankers */}
             {leaderboard.length > 0 && (
               <div className="p-6 bg-gradient-to-b from-gray-50 to-white dark:from-gray-800/50 dark:to-gray-800 border-b border-gray-200 dark:border-gray-700">
                 <h3 className="text-md font-semibold text-gray-700 dark:text-gray-300 mb-4 flex items-center gap-2">
@@ -648,7 +809,6 @@ export default function TestResultPage() {
               </div>
             )}
 
-            {/* All Users Leaderboard */}
             <div className="divide-y divide-gray-200 dark:divide-gray-700">
               <div className="p-4 bg-gray-50 dark:bg-gray-700/50">
                 <div className="grid grid-cols-12 gap-4 text-sm font-semibold text-gray-600 dark:text-gray-400">

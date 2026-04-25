@@ -19,7 +19,8 @@ import {
   Trash2,
   ChevronLeft,
   ChevronRight,
-  Globe
+  Globe,
+  Layers
 } from "lucide-react";
 import { useSelector } from "react-redux";
 
@@ -38,6 +39,7 @@ export default function EditTestPage() {
   const [messageType, setMessageType] = useState("");
   const [activeTab, setActiveTab] = useState("available");
   const [selectedLanguage, setSelectedLanguage] = useState("en");
+  const [selectedSection, setSelectedSection] = useState(null);
   
   // Pagination state
   const [pagination, setPagination] = useState({
@@ -86,7 +88,24 @@ export default function EditTestPage() {
       );
       const data = await res.json();
       setTestDetails(data.test);
-      setTestQuestions(data.test.questions || []);
+      
+      // If test has sections, set questions per section
+      if (data.test.hasSections && data.test.sections) {
+        // Combine all questions from all sections for display
+        const allQuestions = [];
+        data.test.sections.forEach((section, idx) => {
+          if (section.questions && section.questions.length) {
+            allQuestions.push(...section.questions.map(q => ({
+              ...q,
+              _sectionIndex: idx,
+              sectionTitle: section.title
+            })));
+          }
+        });
+        setTestQuestions(allQuestions);
+      } else {
+        setTestQuestions(data.test.questions || []);
+      }
     } catch (err) {
       console.error(err);
     }
@@ -198,32 +217,52 @@ export default function EditTestPage() {
     setMessage("");
 
     try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/admin/tests/${testId}/questions`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`
-          },
-          body: JSON.stringify({ questionIds: selected })
+      let url = `${process.env.NEXT_PUBLIC_API_URL}/api/tests/${testId}/questions`;
+      let payload;
+
+      // Check if test has sections
+      if (testDetails.hasSections) {
+        if (selectedSection === null) {
+          setMessage("Please select a section to add questions to");
+          setMessageType("error");
+          setSubmitting(false);
+          setTimeout(() => setMessage(""), 3000);
+          return;
         }
-      );
+        
+        payload = {
+          questionIds: selected,
+          sectionIndex: selectedSection
+        };
+      } else {
+        payload = {
+          questionIds: selected
+        };
+      }
+
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
 
       const data = await res.json();
      
       if (res.ok) {
         setMessageType("success");
-        setMessage(`✅ Successfully added ${selected.length} question(s)!`);
+        setMessage(`✅ Successfully added ${selected.length} question(s) to ${testDetails.hasSections ? `section ${selectedSection + 1}` : 'test'}!`);
         
         await fetchTestDetails();
-        await fetchQuestions(pagination.currentPage); // Refresh current page
+        await fetchQuestions(pagination.currentPage);
         setSelected([]);
         
         setTimeout(() => setMessage(""), 3000);
       } else {
         setMessageType("error");
-        setMessage(data.msg || "Failed to add questions");
+        setMessage(data.msg || data.message || "Failed to add questions");
         setTimeout(() => setMessage(""), 3000);
       }
     } catch (err) {
@@ -236,19 +275,40 @@ export default function EditTestPage() {
     }
   };
 
-  const removeQuestion = async (questionId) => {
-    if (!confirm("Are you sure you want to remove this question from the test?")) {
+  const removeQuestion = async (questionId, sectionIndex = null) => {
+    const confirmMsg = testDetails.hasSections 
+      ? "Are you sure you want to remove this question from the section?"
+      : "Are you sure you want to remove this question from the test?";
+    
+    if (!confirm(confirmMsg)) {
       return;
     }
 
     setSubmitting(true);
     
     try {
+      let payload;
+      
+      if (testDetails.hasSections && sectionIndex !== undefined) {
+        payload = {
+          questionIds: [questionId],
+          sectionIndex: sectionIndex
+        };
+      } else {
+        payload = {
+          questionIds: [questionId]
+        };
+      }
+
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/admin/tests/${testId}/questions/${questionId}`,
+        `${process.env.NEXT_PUBLIC_API_URL}/api/tests/${testId}/questions`,
         {
           method: "DELETE",
-          headers: { Authorization: `Bearer ${token}` }
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify(payload)
         }
       );
 
@@ -260,8 +320,9 @@ export default function EditTestPage() {
         
         setTimeout(() => setMessage(""), 3000);
       } else {
+        const data = await res.json();
         setMessageType("error");
-        setMessage("Failed to remove question");
+        setMessage(data.msg || data.message || "Failed to remove question");
         setTimeout(() => setMessage(""), 3000);
       }
     } catch (err) {
@@ -284,7 +345,7 @@ export default function EditTestPage() {
   };
 
   // Compact Question Card Component with language support
-  const CompactQuestionCard = ({ question, index, showRemoveButton = false, onRemove, isSelected, onSelect }) => {
+  const CompactQuestionCard = ({ question, index, showRemoveButton = false, onRemove, isSelected, onSelect, sectionName }) => {
     return (
       <div
         className={`bg-white dark:bg-gray-800 rounded-lg border transition-all duration-200 ${
@@ -310,6 +371,11 @@ export default function EditTestPage() {
                 <span className="text-xs font-semibold text-purple-600 dark:text-purple-400">
                   #{index + 1}
                 </span>
+                {sectionName && (
+                  <span className="text-xs px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">
+                    {sectionName}
+                  </span>
+                )}
                 <span className={`text-xs px-1.5 py-0.5 rounded-full ${getDifficultyColor(question.difficulty)}`}>
                   {question.difficulty || "medium"}
                 </span>
@@ -341,7 +407,7 @@ export default function EditTestPage() {
             
             {showRemoveButton && onRemove && (
               <button
-                onClick={() => onRemove(question._id)}
+                onClick={() => onRemove(question._id, question._sectionIndex)}
                 disabled={submitting}
                 className="p-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition disabled:opacity-50 flex-shrink-0"
                 title="Remove from test"
@@ -363,7 +429,11 @@ export default function EditTestPage() {
     );
   }
 
+  // Calculate total marks considering sections
   const totalMarks = testQuestions.reduce((sum, q) => sum + (q.marks || 0), 0);
+  
+  // Get sections for sectional test
+  const sections = testDetails.hasSections ? testDetails.sections || [] : [];
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -386,8 +456,17 @@ export default function EditTestPage() {
                   {testDetails.title}
                 </h1>
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                  {testDetails.duration} min • {testQuestions.length} questions • {totalMarks} marks
+                  {testDetails.hasSections 
+                    ? `${sections.length} sections • ${testQuestions.length} questions • ${totalMarks} marks`
+                    : `${testDetails.duration} min • ${testQuestions.length} questions • ${totalMarks} marks`
+                  }
                 </p>
+                {testDetails.hasSections && (
+                  <p className="text-xs text-purple-600 dark:text-purple-400 mt-1">
+                    <Layers size={12} className="inline mr-1" />
+                    Sectional Test
+                  </p>
+                )}
               </div>
             </div>
             
@@ -452,6 +531,39 @@ export default function EditTestPage() {
         {/* Available Questions Tab */}
         {activeTab === "available" && (
           <>
+            {/* Section Selection for Sectional Tests */}
+            {testDetails.hasSections && sections.length > 0 && (
+              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 mb-4 p-4">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Select Section to Add Questions <span className="text-red-500">*</span>
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                  {sections.map((section, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => setSelectedSection(idx)}
+                      className={`p-3 rounded-lg border-2 transition-all text-left ${
+                        selectedSection === idx
+                          ? "border-purple-500 bg-purple-50 dark:bg-purple-900/20"
+                          : "border-gray-200 dark:border-gray-700 hover:border-purple-300"
+                      }`}
+                    >
+                      <div className="font-medium text-gray-800 dark:text-white">
+                        {section.title}
+                      </div>
+                      <div className="text-xs text-gray-500 mt-1">
+                        {section.duration} min • {section.questions?.length || 0} questions
+                      </div>
+                    </button>
+                  ))}
+                </div>
+                {selectedSection === null && (
+                  <p className="text-red-500 text-xs mt-2">Please select a section to add questions to</p>
+                )}
+              </div>
+            )}
+
             {/* Compact Filters */}
             <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 mb-4">
               <div className="p-3">
@@ -524,6 +636,11 @@ export default function EditTestPage() {
                     <span className="text-xs font-medium text-gray-600 dark:text-gray-400">
                       {selected.length} selected
                     </span>
+                    {testDetails.hasSections && selectedSection !== null && (
+                      <span className="text-xs text-purple-600 dark:text-purple-400">
+                        Adding to: {sections[selectedSection]?.title}
+                      </span>
+                    )}
                   </div>
                   
                   <div className="flex gap-1">
@@ -541,7 +658,7 @@ export default function EditTestPage() {
                     </button>
                     <button
                       onClick={addQuestions}
-                      disabled={submitting || selected.length === 0}
+                      disabled={submitting || selected.length === 0 || (testDetails.hasSections && selectedSection === null)}
                       className="px-3 py-1 text-xs bg-purple-600 text-white rounded hover:bg-purple-700 transition flex items-center gap-1 disabled:opacity-50"
                     >
                       {submitting ? (
@@ -651,7 +768,38 @@ export default function EditTestPage() {
                 <p className="text-sm text-gray-500">No questions in this test</p>
                 <p className="text-xs text-gray-400 mt-1">Add questions from the Available tab</p>
               </div>
+            ) : testDetails.hasSections ? (
+              // Group questions by section for sectional tests
+              sections.map((section, sectionIdx) => {
+                const sectionQuestions = testQuestions.filter(q => q._sectionIndex === sectionIdx);
+                if (sectionQuestions.length === 0) return null;
+                
+                return (
+                  <div key={sectionIdx} className="mb-4">
+                    <div className="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 p-3 rounded-lg mb-2 border border-purple-200 dark:border-purple-800">
+                      <h3 className="font-semibold text-gray-800 dark:text-white">
+                        {section.title}
+                      </h3>
+                      <p className="text-xs text-gray-500">
+                        {section.duration} min • {sectionQuestions.length} questions
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      {sectionQuestions.map((q, index) => (
+                        <CompactQuestionCard
+                          key={q._id}
+                          question={q}
+                          index={index}
+                          showRemoveButton={true}
+                          onRemove={removeQuestion}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                );
+              })
             ) : (
+              // Flat test - show all questions
               testQuestions.map((q, index) => (
                 <CompactQuestionCard
                   key={q._id}

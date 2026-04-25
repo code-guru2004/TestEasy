@@ -14,7 +14,8 @@ import {
   Award,
   Calendar,
   User,
-  SquareChevronRight
+  SquareChevronRight,
+  FastForward
 } from "lucide-react";
 import {  fetchUser, logoutUser } from "@/lib/redux/slices/authSlice";
 import { MdOutlineReceiptLong } from "react-icons/md";
@@ -50,7 +51,8 @@ export default function DashboardLayout({ children }) {
     else if (currentPath === "/dashboard/leaderboard") setActiveTab("leaderboard");
     else if (currentPath === "/dashboard/schedule") setActiveTab("schedule");
     else if (currentPath === "/dashboard/profile") setActiveTab("Profile");
-    
+    else if (currentPath === "/dashboard/speed-booster") setActiveTab("schedule");
+
     dispatch(fetchUser()).then((res) => {
       if (res.meta.requestStatus === "rejected") {
         router.push("/");
@@ -110,6 +112,7 @@ export default function DashboardLayout({ children }) {
     { id: "results", label: "Results", icon: BarChart3, href: "/dashboard/my-results" },
     { id: "leaderboard", label: "Leaderboard", icon: Award, href: "/dashboard/leaderboard" },
     { id: "schedule", label: "Schedule", icon: Calendar, href: "/dashboard/schedule" },
+    { id: "Speed Booster", label: "Speed Booster", icon: FastForward, href: "/dashboard/speed-booster" },
     { id: "Profile", label: "My Profile", icon: User, href: "/dashboard/profile" },
   ];
 

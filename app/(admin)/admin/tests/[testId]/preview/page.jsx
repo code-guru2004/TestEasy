@@ -25,19 +25,25 @@ import {
   Share2,
   Settings,
   Globe,
-  CalendarSync
+  CalendarSync,
+  Layers,
+  Timer
 } from "lucide-react";
 
 export default function PreviewTestPage() {
-  const { testId } = useParams();
+  const params = useParams();
   const router = useRouter();
+  const testId = params?.testId;
   
   const [test, setTest] = useState(null);
   const [questions, setQuestions] = useState([]);
+  const [sections, setSections] = useState([]);
   const [loading, setLoading] = useState(true);
   const [expandedQuestions, setExpandedQuestions] = useState({});
+  const [expandedSections, setExpandedSections] = useState({});
   const [showAnswers, setShowAnswers] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState("en");
+  const [error, setError] = useState(null);
 
   // Languages configuration
   const languages = [
@@ -47,7 +53,9 @@ export default function PreviewTestPage() {
   ];
 
   useEffect(() => {
-    fetchTestDetails();
+    if (testId) {
+      fetchTestDetails();
+    }
   }, [testId]);
 
   // Helper function to get localized text
@@ -67,28 +75,79 @@ export default function PreviewTestPage() {
   const fetchTestDetails = async () => {
     try {
       setLoading(true);
+      setError(null);
+      
+      const token = localStorage.getItem("token");
+      if (!token) {
+        router.push("/login");
+        return;
+      }
+
       const res = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/api/admin/tests/${testId}`,
         {
           headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json"
           }
         }
       );
+      
+      if (!res.ok) {
+        if (res.status === 404) {
+          throw new Error("Test not found");
+        }
+        if (res.status === 401) {
+          router.push("/login");
+          return;
+        }
+        throw new Error("Failed to fetch test details");
+      }
+      
       const data = await res.json();
       setTest(data.test);
-      setQuestions(data.test.questions || []);
+      
+      // Handle both flat and sectional tests
+      if (data.test.hasSections && data.test.sections) {
+        setSections(data.test.sections);
+        // Flatten questions for easy counting but keep section info
+        const allQuestions = [];
+        data.test.sections.forEach((section, sectionIdx) => {
+          if (section.questions && section.questions.length) {
+            section.questions.forEach((q, qIdx) => {
+              allQuestions.push({
+                ...q,
+                sectionIndex: sectionIdx,
+                sectionTitle: section.title,
+                questionIndex: qIdx
+              });
+            });
+          }
+        });
+        setQuestions(allQuestions);
+      } else {
+        setSections([]);
+        setQuestions(data.test.questions || []);
+      }
     } catch (err) {
       console.error(err);
+      setError(err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  const toggleQuestionExpand = (index) => {
+  const toggleQuestionExpand = (questionKey) => {
     setExpandedQuestions(prev => ({
       ...prev,
-      [index]: !prev[index]
+      [questionKey]: !prev[questionKey]
+    }));
+  };
+
+  const toggleSectionExpand = (sectionIndex) => {
+    setExpandedSections(prev => ({
+      ...prev,
+      [sectionIndex]: !prev[sectionIndex]
     }));
   };
 
@@ -98,10 +157,20 @@ export default function PreviewTestPage() {
       allExpanded[index] = true;
     });
     setExpandedQuestions(allExpanded);
+    
+    // Expand all sections for sectional tests
+    if (test?.hasSections && sections.length > 0) {
+      const allSectionsExpanded = {};
+      sections.forEach((_, idx) => {
+        allSectionsExpanded[idx] = true;
+      });
+      setExpandedSections(allSectionsExpanded);
+    }
   };
 
   const collapseAll = () => {
     setExpandedQuestions({});
+    setExpandedSections({});
   };
 
   const formatDate = (dateString) => {
@@ -150,7 +219,8 @@ export default function PreviewTestPage() {
         alert("Test deleted successfully!");
         router.push("/admin/tests");
       } else {
-        alert("Failed to delete test");
+        const data = await res.json();
+        alert(data.message || "Failed to delete test");
       }
     } catch (err) {
       console.error(err);
@@ -169,13 +239,13 @@ export default function PreviewTestPage() {
     );
   }
 
-  if (!test) {
+  if (error || !test) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center p-4">
         <div className="text-center">
           <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
           <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-2">Test Not Found</h2>
-          <p className="text-gray-600 dark:text-gray-300">The test you're looking for doesn't exist.</p>
+          <p className="text-gray-600 dark:text-gray-300">{error || "The test you're looking for doesn't exist."}</p>
           <button
             onClick={() => router.push("/admin/tests")}
             className="mt-6 px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition"
@@ -188,19 +258,30 @@ export default function PreviewTestPage() {
   }
 
   const totalMarks = questions.reduce((sum, q) => sum + (q.marks || 0), 0);
-  const averageDifficulty = questions.length > 0 
-    ? (questions.filter(q => q.difficulty === "hard").length / questions.length) * 100 
-    : 0;
+  const totalDuration = test.hasSections 
+    ? sections.reduce((sum, s) => sum + (s.duration || 0), 0)
+    : test.duration;
 
   // Get subject and topic names (if they're populated objects)
   const getSubjectName = () => {
     if (test.subject && typeof test.subject === 'object') return test.subject.name;
+    if (Array.isArray(test.subject) && test.subject.length) return test.subject.join(", ");
     return "Not specified";
   };
 
   const getTopicName = () => {
     if (test.topic && typeof test.topic === 'object') return test.topic.name;
     return "Not specified";
+  };
+
+  // Calculate section statistics
+  const getSectionStats = (section) => {
+    const sectionQuestions = section.questions || [];
+    const sectionTotalMarks = sectionQuestions.reduce((sum, q) => sum + (q.marks || 0), 0);
+    return {
+      questionCount: sectionQuestions.length,
+      totalMarks: sectionTotalMarks
+    };
   };
 
   return (
@@ -229,7 +310,7 @@ export default function PreviewTestPage() {
               </div>
             </div>
             
-            <div className="flex gap-3">
+            <div className="flex gap-3 flex-wrap">
               {/* Language Selector */}
               <div className="flex items-center gap-2 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800">
                 <Globe size={16} className="text-gray-500" />
@@ -271,6 +352,7 @@ export default function PreviewTestPage() {
           </div>
         </div>
 
+        {/* Rest of your component remains the same */}
         {/* Test Information Card */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden mb-6">
           <div className="bg-gradient-to-r from-blue-500 to-cyan-500 p-6 text-white">
@@ -285,8 +367,8 @@ export default function PreviewTestPage() {
                   <Clock className="w-5 h-5 text-purple-600" />
                 </div>
                 <div>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Duration</p>
-                  <p className="font-semibold text-gray-800 dark:text-white">{test.duration} minutes</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Total Duration</p>
+                  <p className="font-semibold text-gray-800 dark:text-white">{totalDuration} minutes</p>
                 </div>
               </div>
               
@@ -312,7 +394,7 @@ export default function PreviewTestPage() {
               
               <div className="flex items-center gap-3">
                 <div className="bg-purple-100 dark:bg-purple-900/30 p-2 rounded-lg">
-                  <CalendarSync  className="w-5 h-5 text-purple-600" />
+                  <CalendarSync className="w-5 h-5 text-purple-600" />
                 </div>
                 <div>
                   <p className="text-sm text-gray-500 dark:text-gray-400">Max Attempts</p>
@@ -336,8 +418,17 @@ export default function PreviewTestPage() {
               </div>
               <div>
                 <p className="text-sm text-gray-500 dark:text-gray-400">Negative Marking</p>
-                <p className="font-medium text-gray-800 dark:text-white">{test.negativeMarking || 0} marks per wrong answer</p>
+                <p className="font-medium text-gray-800 dark:text-white">{test.negativeMarks || 0} marks per wrong answer</p>
               </div>
+              {test.hasSections && (
+                <div className="col-span-2">
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Test Structure</p>
+                  <p className="font-medium text-gray-800 dark:text-white flex items-center gap-2">
+                    <Layers size={16} className="text-purple-500" />
+                    Sectional Test - {sections.length} sections
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Test Settings */}
@@ -379,7 +470,7 @@ export default function PreviewTestPage() {
               <div className="flex items-center gap-2">
                 <BookOpen className="w-5 h-5 text-purple-500" />
                 <h2 className="text-xl font-semibold text-gray-800 dark:text-white">
-                  Questions ({questions.length})
+                  {test.hasSections ? "Test Sections & Questions" : `Questions (${questions.length})`}
                 </h2>
               </div>
               
@@ -409,27 +500,166 @@ export default function PreviewTestPage() {
             </div>
           </div>
 
-          <div className="divide-y divide-gray-200 dark:divide-gray-700">
-            {questions.length === 0 ? (
-              <div className="p-12 text-center">
-                <div className="bg-gray-100 dark:bg-gray-700 p-4 rounded-full inline-flex mb-4">
-                  <AlertCircle className="w-12 h-12 text-gray-400" />
-                </div>
-                <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-2">
-                  No Questions Added
-                </h3>
-                <p className="text-gray-500 dark:text-gray-400">
-                  This test doesn't have any questions yet. Add questions from the edit page.
-                </p>
-                <button
-                  onClick={handleEdit}
-                  className="mt-4 px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition"
-                >
-                  Add Questions
-                </button>
+          {questions.length === 0 ? (
+            <div className="p-12 text-center">
+              <div className="bg-gray-100 dark:bg-gray-700 p-4 rounded-full inline-flex mb-4">
+                <AlertCircle className="w-12 h-12 text-gray-400" />
               </div>
-            ) : (
-              questions.map((question, index) => (
+              <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-2">
+                No Questions Added
+              </h3>
+              <p className="text-gray-500 dark:text-gray-400">
+                This test doesn't have any questions yet. Add questions from the edit page.
+              </p>
+              <button
+                onClick={handleEdit}
+                className="mt-4 px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition"
+              >
+                Add Questions
+              </button>
+            </div>
+          ) : test.hasSections ? (
+            // Sectional Test View
+            <div className="divide-y divide-gray-200 dark:divide-gray-700">
+              {sections.map((section, sectionIdx) => {
+                const stats = getSectionStats(section);
+                const isSectionExpanded = expandedSections[sectionIdx];
+                
+                return (
+                  <div key={sectionIdx} className="overflow-hidden">
+                    {/* Section Header */}
+                    <button
+                      onClick={() => toggleSectionExpand(sectionIdx)}
+                      className="w-full p-6 text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 transition"
+                    >
+                      <div className="flex items-center justify-between flex-wrap gap-4">
+                        <div className="flex items-center gap-3">
+                          <div className="bg-gradient-to-r from-purple-500 to-pink-500 p-2 rounded-lg">
+                            <Layers className="w-5 h-5 text-white" />
+                          </div>
+                          <div>
+                            <h3 className="text-lg font-semibold text-gray-800 dark:text-white">
+                              {section.title}
+                            </h3>
+                            <div className="flex items-center gap-3 mt-1 text-sm text-gray-500">
+                              <span className="flex items-center gap-1">
+                                <Timer size={14} />
+                                {section.duration} minutes
+                              </span>
+                              <span>{stats.questionCount} questions</span>
+                              <span>{stats.totalMarks} marks</span>
+                            </div>
+                          </div>
+                        </div>
+                        {isSectionExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                      </div>
+                    </button>
+
+                    {/* Section Questions */}
+                    {isSectionExpanded && (
+                      <div className="divide-y divide-gray-200 dark:divide-gray-700 bg-gray-50 dark:bg-gray-800/50">
+                        {section.questions?.map((question, qIdx) => {
+                          const questionKey = `${sectionIdx}_${qIdx}`;
+                          const isExpanded = expandedQuestions[questionKey];
+                          
+                          return (
+                            <div key={question._id || qIdx} className="p-6 pl-12">
+                              <button
+                                onClick={() => toggleQuestionExpand(questionKey)}
+                                className="w-full text-left flex items-start justify-between gap-4"
+                              >
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2 mb-2 flex-wrap">
+                                    <span className="text-sm font-semibold text-purple-600 dark:text-purple-400">
+                                      Q{qIdx + 1}
+                                    </span>
+                                    <span className={`text-xs px-2 py-0.5 rounded-full ${getDifficultyColor(question.difficulty)}`}>
+                                      {question.difficulty || "medium"}
+                                    </span>
+                                    <span className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 px-2 py-0.5 rounded-full">
+                                      {question.marks} mark{question.marks !== 1 ? 's' : ''}
+                                    </span>
+                                    {question.negativeMarks > 0 && (
+                                      <span className="text-xs bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 px-2 py-0.5 rounded-full">
+                                        -{question.negativeMarks} mark
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-gray-800 dark:text-white font-medium">
+                                    {getLocalizedText(question.questionText)}
+                                  </p>
+                                  <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
+                                    <span className="flex items-center gap-1">
+                                      <BookOpen size={12} />
+                                      {typeof question.subject === 'object' ? question.subject.name : question.subject || "No subject"}
+                                    </span>
+                                    <span className="flex items-center gap-1">
+                                      <Tag size={12} />
+                                      {typeof question.topic === 'object' ? question.topic.name : question.topic || "No topic"}
+                                    </span>
+                                  </div>
+                                </div>
+                                {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                              </button>
+
+                              {isExpanded && (
+                                <div className="mt-4 pl-4 border-l-4 border-purple-200 dark:border-purple-800">
+                                  <div className="space-y-3">
+                                    <div>
+                                      <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Options:</p>
+                                      <div className="space-y-2">
+                                        {question.options?.map((opt, optIdx) => {
+                                          const isCorrect = question.correctAnswer && 
+                                            ((typeof question.correctAnswer === 'string' && opt.id === question.correctAnswer) ||
+                                             (typeof question.correctAnswer === 'string' && opt.en === question.correctAnswer));
+                                          
+                                          return (
+                                            <div 
+                                              key={opt.id || optIdx}
+                                              className={`text-sm p-2 rounded ${
+                                                showAnswers && isCorrect
+                                                  ? "bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-300 border-l-4 border-green-500"
+                                                  : "text-gray-600 dark:text-gray-400"
+                                              }`}
+                                            >
+                                              {String.fromCharCode(65 + optIdx)}. {getLocalizedOptionText(opt)}
+                                              {showAnswers && isCorrect && (
+                                                <span className="ml-2 text-xs text-green-600 dark:text-green-400">(Correct Answer)</span>
+                                              )}
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+
+                                    {/* Fact Section */}
+                                    {question.fact && (
+                                      <div className="mt-3 p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
+                                        <div className="flex items-start gap-2">
+                                          <Lightbulb size={16} className="text-purple-500 mt-0.5 flex-shrink-0" />
+                                          <div>
+                                            <p className="text-xs font-semibold text-purple-600 dark:text-purple-400 mb-1">Educational Fact</p>
+                                            <p className="text-sm text-gray-700 dark:text-gray-300">{getLocalizedText(question.fact)}</p>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            // Flat Test View
+            <div className="divide-y divide-gray-200 dark:divide-gray-700">
+              {questions.map((question, index) => (
                 <div key={question._id || index} className="p-6">
                   <button
                     onClick={() => toggleQuestionExpand(index)}
@@ -458,11 +688,11 @@ export default function PreviewTestPage() {
                       <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
                         <span className="flex items-center gap-1">
                           <BookOpen size={12} />
-                          {typeof question.subject === 'object' ? question.subject.name : "No subject"}
+                          {typeof question.subject === 'object' ? question.subject.name : question.subject || "No subject"}
                         </span>
                         <span className="flex items-center gap-1">
                           <Tag size={12} />
-                          {typeof question.topic === 'object' ? question.topic.name : "No topic"}
+                          {typeof question.topic === 'object' ? question.topic.name : question.topic || "No topic"}
                         </span>
                       </div>
                     </div>
@@ -515,9 +745,9 @@ export default function PreviewTestPage() {
                     </div>
                   )}
                 </div>
-              ))
-            )}
-          </div>
+              ))}
+            </div>
+          )}
 
           {/* Summary Footer */}
           {questions.length > 0 && (

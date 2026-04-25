@@ -44,7 +44,7 @@ export default function AdminTestsPage() {
     try {
       setLoading(true);
       const res = await fetch(
-        "https://govt-quiz-app.onrender.com/api/admin/tests",
+        `${process.env.NEXT_PUBLIC_API_URL}/api/admin/tests`,
         {
           headers: {
             Authorization: `Bearer ${localStorage.getItem("token")}`

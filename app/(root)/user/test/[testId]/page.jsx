@@ -14,7 +14,16 @@ import {
   Shield,
   Monitor,
   AlertTriangle,
-  ArrowRight
+  ArrowRight,
+  Layers,
+  Calendar,
+  Award,
+  Users,
+  BarChart3,
+  TrendingUp,
+  Info,
+  RefreshCw,
+  History
 } from "lucide-react";
 
 export default function TestDetails() {
@@ -26,14 +35,17 @@ export default function TestDetails() {
   const [loading, setLoading] = useState(false);
   const [attemptInfo, setAttemptInfo] = useState(null);
   const [showInstructions, setShowInstructions] = useState(true);
+  const [expandedSections, setExpandedSections] = useState({});
 
   useEffect(() => {
     fetchTest();
   }, []);
 
   const fetchTest = async () => {
+    const token = localStorage.getItem("token")
+   
     const res = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL}/api/user/test/${testId}`,
+      `${process.env.NEXT_PUBLIC_API_URL}/api/tests/${testId}/details`,
       {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`
@@ -51,9 +63,16 @@ export default function TestDetails() {
     setLoading(true);
     
     if (attemptInfo.action === "resume") {
-      router.push(
-        `/user/test/${testId}/attempt/${attemptInfo.activeAttemptId}?agreed=${checked}`
-      );
+      // Conditional redirect based on test type
+      if (test.hasSections) {
+        router.push(
+          `/user/sectional/${testId}/attempt/${attemptInfo.activeAttemptId}?agreed=${checked}`
+        );
+      } else {
+        router.push(
+          `/user/test/${testId}/attempt/${attemptInfo.activeAttemptId}?agreed=${checked}`
+        );
+      }
       return;
     }
 
@@ -67,9 +86,16 @@ export default function TestDetails() {
     const data = await res.json();
 
     if (res.ok) {
-      router.push(
-        `/user/test/${testId}/attempt/${data?.attemptId}?agreed=${checked}`
-      );
+      // Conditional redirect based on test type
+      if (test.hasSections) {
+        router.push(
+          `/user/sectional/${testId}/attempt/${data?.attemptId}?agreed=${checked}`
+        );
+      } else {
+        router.push(
+          `/user/test/${testId}/attempt/${data?.attemptId}?agreed=${checked}`
+        );
+      }
     }
     
     setLoading(false);
@@ -88,6 +114,24 @@ export default function TestDetails() {
     }
   };
 
+  const formatDate = (dateString) => {
+    if (!dateString) return "Not set";
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const toggleSectionExpand = (sectionIndex) => {
+    setExpandedSections(prev => ({
+      ...prev,
+      [sectionIndex]: !prev[sectionIndex]
+    }));
+  };
+
   if (!test) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
@@ -101,14 +145,24 @@ export default function TestDetails() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-8 px-4">
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-5xl mx-auto">
         {/* Test Header Card */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-6">
-          <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4">
-            <h1 className="text-xl font-bold text-white">{test.title}</h1>
-            {test.description && (
-              <p className="text-blue-100 text-sm mt-1">{test.description}</p>
-            )}
+          <div className="bg-gradient-to-r from-blue-600 to-purple-600 px-6 py-5">
+            <div className="flex items-start justify-between">
+              <div className="flex-1">
+                <h1 className="text-2xl font-bold text-white">{test.title}</h1>
+                {test.description && (
+                  <p className="text-blue-100 text-sm mt-1">{test.description}</p>
+                )}
+              </div>
+              {test.hasSections && (
+                <div className="bg-white/20 px-3 py-1 rounded-full flex items-center gap-1">
+                  <Layers className="w-4 h-4 text-white" />
+                  <span className="text-white text-sm font-medium">Sectional Test</span>
+                </div>
+              )}
+            </div>
           </div>
           
           <div className="p-6">
@@ -119,7 +173,7 @@ export default function TestDetails() {
                   <Clock className="w-5 h-5 text-blue-600" />
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500">Duration</p>
+                  <p className="text-xs text-gray-500">Total Duration</p>
                   <p className="text-lg font-semibold text-gray-800">{test.duration} min</p>
                 </div>
               </div>
@@ -129,14 +183,14 @@ export default function TestDetails() {
                   <FileQuestion className="w-5 h-5 text-green-600" />
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500">Questions</p>
-                  <p className="text-lg font-semibold text-gray-800">{test.questions?.length || 0}</p>
+                  <p className="text-xs text-gray-500">Total Questions</p>
+                  <p className="text-lg font-semibold text-gray-800">{test.totalQuestions || 0}</p>
                 </div>
               </div>
               
               <div className="flex items-center gap-3">
                 <div className="bg-purple-100 p-2 rounded-lg">
-                  <Trophy className="w-5 h-5 text-purple-600" />
+                  <Award className="w-5 h-5 text-purple-600" />
                 </div>
                 <div>
                   <p className="text-xs text-gray-500">Total Marks</p>
@@ -157,41 +211,111 @@ export default function TestDetails() {
               </div>
             </div>
 
+            {/* Section Overview for Sectional Tests */}
+            {test.hasSections && test.sectionOverview && test.sectionOverview.length > 0 && (
+              <div className="mb-6 p-4 bg-gradient-to-r from-purple-50 to-blue-50 rounded-xl border border-purple-100">
+                <div className="flex items-center gap-2 mb-3">
+                  <Layers className="w-5 h-5 text-purple-600" />
+                  <h3 className="font-semibold text-gray-800">Test Sections</h3>
+                  <span className="text-xs bg-purple-200 text-purple-700 px-2 py-0.5 rounded-full">
+                    {test.sectionsCount} Sections
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  {test.sectionOverview.map((section, idx) => (
+                    <div key={idx} className="bg-white rounded-lg p-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-sm font-semibold text-purple-600">Section {idx + 1}</span>
+                            <span className="text-sm font-medium text-gray-800">{section.title}</span>
+                          </div>
+                          <div className="flex items-center gap-4 text-xs text-gray-500">
+                            <span className="flex items-center gap-1">
+                              <Clock size={12} />
+                              {section.duration} min
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <FileQuestion size={12} />
+                              {section.questionsCount} questions
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <Award size={12} />
+                              {section.marksTotal} marks
+                            </span>
+                          </div>
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-gray-400" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Subject/Topic Info */}
             <div className="flex flex-wrap gap-4 pt-4 border-t border-gray-100">
-              {test.subject && (
-                <div className="flex items-center gap-2">
-                  <BookOpen className="w-4 h-4 text-gray-400" />
-                  <span className="text-sm text-gray-600">Subject:</span>
-                  <span className="text-sm font-medium text-gray-800">{test.subject.name}</span>
-                </div>
-              )}
-              {test.topic && (
-                <div className="flex items-center gap-2">
-                  <Target className="w-4 h-4 text-gray-400" />
-                  <span className="text-sm text-gray-600">Topic:</span>
-                  <span className="text-sm font-medium text-gray-800">{test.topic.name}</span>
-                </div>
-              )}
               {test.subjects && test.subjects.length > 0 && (
-                <div className="flex items-center gap-2 flex-wrap">
-                  <BookOpen className="w-4 h-4 text-gray-400" />
-                  <span className="text-sm text-gray-600">Subjects:</span>
-                  <span className="text-sm font-medium text-gray-800">
-                    {test.subjects.map(s => s.name).join(", ")}
-                  </span>
+                <div className="flex items-start gap-2 flex-wrap">
+                  <BookOpen className="w-4 h-4 text-gray-400 mt-0.5" />
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Subjects Covered</p>
+                    <div className="flex flex-wrap gap-1">
+                      {test.subjects.map((subject, idx) => (
+                        <span key={idx} className="text-xs px-2 py-0.5 bg-gray-100 rounded-full text-gray-700">
+                          {typeof subject === 'object' ? subject.name : subject}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
 
-            {/* Attempt Info Badge */}
+            {/* Schedule Info */}
+            <div className="mt-4 pt-4 border-t border-gray-100">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-gray-400" />
+                  <span className="text-gray-600">Starts:</span>
+                  <span className="font-medium text-gray-800">{formatDate(test.startTime)}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-gray-400" />
+                  <span className="text-gray-600">Ends:</span>
+                  <span className="font-medium text-gray-800">{formatDate(test.endTime)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Attempt Info */}
             {attemptInfo && (
               <div className="mt-4 pt-4 border-t border-gray-100">
-                <div className="inline-flex items-center gap-2 px-3 py-1 bg-gray-100 rounded-full">
-                  <span className="text-xs text-gray-600">Attempt:</span>
-                  <span className="text-xs font-semibold text-gray-800">
-                    {attemptInfo.attemptCount} / {attemptInfo.maxAttempts}
-                  </span>
+                <div className="flex flex-wrap gap-3 items-center">
+                  <div className="inline-flex items-center gap-2 px-3 py-1 bg-gray-100 rounded-full">
+                    <span className="text-xs text-gray-600">Attempts Used:</span>
+                    <span className="text-xs font-semibold text-gray-800">
+                      {attemptInfo.attemptCount} / {attemptInfo.maxAttempts}
+                    </span>
+                  </div>
+                  {attemptInfo.bestScore && (
+                    <div className="inline-flex items-center gap-2 px-3 py-1 bg-green-100 rounded-full">
+                      <TrendingUp className="w-3 h-3 text-green-600" />
+                      <span className="text-xs text-green-600">Best Score:</span>
+                      <span className="text-xs font-semibold text-green-700">
+                        {attemptInfo.bestScore} / {test.totalMarks}
+                      </span>
+                    </div>
+                  )}
+                  {attemptInfo.averageScore && (
+                    <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-100 rounded-full">
+                      <BarChart3 className="w-3 h-3 text-blue-600" />
+                      <span className="text-xs text-blue-600">Average:</span>
+                      <span className="text-xs font-semibold text-blue-700">
+                        {attemptInfo.averageScore.toFixed(1)} / {test.totalMarks}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -218,6 +342,12 @@ export default function TestDetails() {
                   <div>
                     <p className="text-sm font-medium text-gray-800">Time Limit</p>
                     <p className="text-xs text-gray-500">You have {test.duration} minutes to complete this test.</p>
+                    {test.hasSections && test.sectionOverview && (
+                      <p className="text-xs text-gray-400 mt-1">
+                        • Each section has its own time limit
+                        • Section timer runs independently
+                      </p>
+                    )}
                   </div>
                 </div>
                 
@@ -227,19 +357,27 @@ export default function TestDetails() {
                   </div>
                   <div>
                     <p className="text-sm font-medium text-gray-800">Question Pattern</p>
-                    <p className="text-xs text-gray-500">Total {test.questions?.length || 0} questions with multiple choice answers.</p>
+                    <p className="text-xs text-gray-500">
+                      Total {test.totalQuestions || 0} questions with multiple choice answers.
+                      {test.hasSections && ` Questions are divided into ${test.sectionsCount} sections.`}
+                    </p>
                   </div>
                 </div>
                 
                 <div className="flex items-start gap-3">
                   <div className="bg-purple-100 p-1 rounded-full mt-0.5">
-                    <Trophy className="w-3 h-3 text-purple-600" />
+                    <Award className="w-3 h-3 text-purple-600" />
                   </div>
                   <div>
                     <p className="text-sm font-medium text-gray-800">Marking Scheme</p>
                     <p className="text-xs text-gray-500">
-                      Each question carries {test.totalMarks / test.questions?.length || 0} marks.
-                      {test.negativeMarks > 0 && ` Negative marking: ${test.negativeMarks} marks per wrong answer.`}
+                      Total marks: {test.totalMarks}
+                      {test.negativeMarks > 0 && (
+                        <span className="text-red-600"> Negative marking: {test.negativeMarks} marks per wrong answer.</span>
+                      )}
+                      {test.negativeMarks === 0 && (
+                        <span className="text-green-600"> No negative marking.</span>
+                      )}
                     </p>
                   </div>
                 </div>
@@ -253,10 +391,25 @@ export default function TestDetails() {
                     <p className="text-xs text-gray-500">
                       • Do not refresh the page during the test.<br />
                       • Answers are auto-saved.<br />
-                      • Ensure stable internet connection.
+                      • Ensure stable internet connection.<br />
+                      • {test.allowResume ? "You can resume the test if interrupted." : "Test cannot be resumed once interrupted."}
                     </p>
                   </div>
                 </div>
+
+                {test.shuffleQuestions && (
+                  <div className="flex items-start gap-3">
+                    <div className="bg-indigo-100 p-1 rounded-full mt-0.5">
+                      <Info className="w-3 h-3 text-indigo-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-800">Additional Info</p>
+                      <p className="text-xs text-gray-500">
+                        Questions will be shuffled for each attempt.
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -275,24 +428,38 @@ export default function TestDetails() {
                 {/* Quick Summary */}
                 <div className="bg-gray-50 rounded-lg p-3">
                   <p className="text-xs font-medium text-gray-700 mb-2">Quick Summary</p>
-                  <div className="space-y-1">
+                  <div className="space-y-2">
                     <div className="flex justify-between text-xs">
                       <span className="text-gray-500">Test Duration:</span>
                       <span className="font-medium text-gray-800">{test.duration} minutes</span>
                     </div>
                     <div className="flex justify-between text-xs">
                       <span className="text-gray-500">Total Questions:</span>
-                      <span className="font-medium text-gray-800">{test.questions?.length || 0}</span>
+                      <span className="font-medium text-gray-800">{test.totalQuestions || 0}</span>
                     </div>
                     <div className="flex justify-between text-xs">
                       <span className="text-gray-500">Maximum Marks:</span>
                       <span className="font-medium text-gray-800">{test.totalMarks}</span>
                     </div>
-                    {attemptInfo && attemptInfo.attemptCount > 0 && (
+                    {test.hasSections && test.sectionsCount > 0 && (
                       <div className="flex justify-between text-xs">
-                        <span className="text-gray-500">Previous Attempts:</span>
-                        <span className="font-medium text-orange-600">{attemptInfo.attemptCount}</span>
+                        <span className="text-gray-500">Number of Sections:</span>
+                        <span className="font-medium text-purple-600">{test.sectionsCount}</span>
                       </div>
+                    )}
+                    {attemptInfo && attemptInfo.attemptCount > 0 && (
+                      <>
+                        <div className="flex justify-between text-xs">
+                          <span className="text-gray-500">Previous Attempts:</span>
+                          <span className="font-medium text-orange-600">{attemptInfo.attemptCount}</span>
+                        </div>
+                        {attemptInfo.bestScore && (
+                          <div className="flex justify-between text-xs">
+                            <span className="text-gray-500">Best Score:</span>
+                            <span className="font-medium text-green-600">{attemptInfo.bestScore} / {test.totalMarks}</span>
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>
@@ -316,25 +483,23 @@ export default function TestDetails() {
                 </label>
 
                 {/* Start Button */}
-                
-
-                      <button
-                        disabled={!checked || loading || (attemptInfo && attemptInfo.attemptCount >= attemptInfo.maxAttempts)}
-                        onClick={handleStart}
-                        className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-medium py-3 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-md hover:shadow-lg"
-                      >
-                        {loading ? (
-                          <>
-                            <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
-                            <span>Processing...</span>
-                          </>
-                        ) : (
-                          <>
-                            <span>{getButtonText()}</span>
-                            <ArrowRight className="w-4 h-4" />
-                          </>
-                        )}
-                      </button>
+                <button
+                  disabled={!checked || loading || (attemptInfo && attemptInfo.attemptCount >= attemptInfo.maxAttempts)}
+                  onClick={handleStart}
+                  className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-medium py-3 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-md hover:shadow-lg"
+                >
+                  {loading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                      <span>Processing...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>{getButtonText()}</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
+                </button>
 
                 {/* Additional Info */}
                 <div className="flex items-center justify-center gap-4 text-xs text-gray-400 pt-2">
@@ -346,11 +511,51 @@ export default function TestDetails() {
                     <Shield className="w-3 h-3" />
                     Secure browser
                   </span>
+                  {test.allowResume && (
+                    <span className="flex items-center gap-1">
+                      <RefreshCw className="w-3 h-3" />
+                      Resumable
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
           </div>
         </div>
+
+        {/* Previous Attempts Section */}
+        {attemptInfo && attemptInfo.completedAttempts && attemptInfo.completedAttempts.length > 0 && (
+          <div className="mt-6 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="bg-gradient-to-r from-gray-600 to-gray-700 px-5 py-3">
+              <div className="flex items-center gap-2">
+                <History className="w-5 h-5 text-white" />
+                <h2 className="text-white font-semibold">Previous Attempts</h2>
+              </div>
+            </div>
+            <div className="p-5">
+              <div className="space-y-3">
+                {attemptInfo.completedAttempts.map((attempt, idx) => (
+                  <div key={attempt.attemptId} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div>
+                      <p className="text-sm font-medium text-gray-800">Attempt #{attemptInfo.completedAttempts.length - idx}</p>
+                      <p className="text-xs text-gray-500">{formatDate(attempt.submittedAt)}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-semibold text-green-600">Score: {attempt.score}/{test.totalMarks}</p>
+                      <p className="text-xs text-gray-500">Status: {attempt.status}</p>
+                    </div>
+                    <button
+                      onClick={() => router.push(`/user/test/${testId}/result?attemptId=${attempt.attemptId}`)}
+                      className="px-3 py-1 text-xs bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition"
+                    >
+                      View Result
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Footer Note */}
         <div className="mt-6 text-center">

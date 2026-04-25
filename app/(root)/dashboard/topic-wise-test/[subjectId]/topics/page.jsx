@@ -68,7 +68,7 @@ export default function TopicsPage() {
       
       // Fetch topics for this subject
       const topicsRes = await axios.get(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/topics/search?subject=${subjectId}`,
+        `${process.env.NEXT_PUBLIC_API_URL}/api/topics/subject/${subjectId}`,
         {
           headers: { Authorization: `Bearer ${token}` }
         }

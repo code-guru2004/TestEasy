@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
 import {
   Clock,
@@ -14,7 +14,9 @@ import {
   Moon,
   Sun,
   Menu,
-  Globe
+  Globe,
+  Wifi,
+  WifiOff
 } from "lucide-react";
 import Image from "next/image";
 
@@ -39,6 +41,13 @@ export default function AttemptPage() {
   const [userEmail, setUserEmail] = useState("");
   const [userId, setUserId] = useState("");
   const [selectedLanguage, setSelectedLanguage] = useState("en");
+  const [isOnline, setIsOnline] = useState(true);
+  const [syncStatus, setSyncStatus] = useState("synced");
+
+  // Refs
+  const timerIntervalRef = useRef(null);
+  const syncIntervalRef = useRef(null);
+  const isMountedRef = useRef(true);
 
   // Languages configuration
   const languages = [
@@ -47,7 +56,7 @@ export default function AttemptPage() {
     { code: "bn", name: "বাংলা", flag: "🇧🇩" }
   ];
 
-  // Memoized helper functions to prevent re-renders
+  // Helper functions
   const getLocalizedText = useCallback((textObj) => {
     if (!textObj) return "—";
     if (typeof textObj === 'string') return textObj;
@@ -60,13 +69,6 @@ export default function AttemptPage() {
     return option[selectedLanguage] || option.en || "—";
   }, [selectedLanguage]);
 
-  // Helper function to get option text from ID
-  const getOptionTextFromId = useCallback((question, optionId) => {
-    if (!question.options || !optionId) return null;
-    const option = question.options.find(opt => opt.id === optionId);
-    return option ? getLocalizedOptionText(option) : null;
-  }, [getLocalizedOptionText]);
-
   // 🚨 SECURITY CHECK
   useEffect(() => {
     if (agreed !== "true") {
@@ -75,29 +77,112 @@ export default function AttemptPage() {
     }
   }, [agreed, testId, router]);
 
+  // Cleanup
   useEffect(() => {
-    if (attemptId) {
-      fetchAttempt();
-      fetchTestDetails();
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+      if (syncIntervalRef.current) clearInterval(syncIntervalRef.current);
+    };
+  }, []);
+
+  // Fetch attempt data
+  const fetchAttempt = useCallback(async (showSync = true) => {
+    if (!attemptId) return;
+
+    if (showSync) {
+      setSyncStatus("syncing");
     }
-  }, [attemptId]);
+
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/user/attempts/${attemptId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`
+          }
+        }
+      );
+
+      const data = await res.json();
+      
+      if (!isMountedRef.current) return;
+
+      // Check if test is completed
+      if (data.attempt.status === "completed") {
+        router.push(`/user/test/${testId}/result?attemptId=${attemptId}`);
+        return;
+      }
+      
+      setUserEmail(data.user?.email || "");
+      setUserId(data.user?.id || "");
+      setCurrent(data.attempt.currentQuestionIndex || 0);
+      setTimeLeft(data.attempt.remainingTime);
+      setIsPaused(data.attempt.status === "paused");
+      
+      // Process questions
+      const processedQuestions = data.questions.map(q => ({
+        ...q,
+        selectedOptionId: q.selectedOption || null
+      }));
+      setQuestions(processedQuestions);
+      
+      // Initialize marked for review
+      const marked = processedQuestions
+        .filter(q => q.isMarkedForReview)
+        .map(q => q._id);
+      setMarkedForReview(marked);
+
+      setSyncStatus("synced");
+      setIsOnline(true);
+    } catch (err) {
+      console.error("Error fetching attempt:", err);
+      setIsOnline(false);
+      setSyncStatus("offline");
+    }
+  }, [attemptId, testId, router]);
+
+  // Auto sync every 10 seconds
+  useEffect(() => {
+    if (!isPaused && !submitting && isOnline && attemptId) {
+      syncIntervalRef.current = setInterval(() => {
+        fetchAttempt(false);
+      }, 10000);
+      
+      return () => {
+        if (syncIntervalRef.current) clearInterval(syncIntervalRef.current);
+      };
+    }
+  }, [isPaused, submitting, isOnline, attemptId, fetchAttempt]);
 
   // Timer effect
   useEffect(() => {
-    if (timeLeft !== null && timeLeft > 0 && !isPaused) {
-      const timer = setInterval(() => {
+    if (timeLeft !== null && timeLeft > 0 && !isPaused && !submitting) {
+      timerIntervalRef.current = setInterval(() => {
         setTimeLeft(prev => {
           if (prev <= 1) {
-            clearInterval(timer);
-            submitTest();
+            clearInterval(timerIntervalRef.current);
+            submitTest(true);
             return 0;
           }
           return prev - 1;
         });
       }, 1000);
-      return () => clearInterval(timer);
+      
+      return () => {
+        if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+      };
     }
-  }, [timeLeft, isPaused]);
+  }, [timeLeft, isPaused, submitting]);
+
+  // Initial load
+  useEffect(() => {
+    if (attemptId) {
+      fetchAttempt();
+      fetchTestDetails();
+    }
+  }, [attemptId, fetchAttempt]);
 
   const fetchTestDetails = async () => {
     try {
@@ -116,57 +201,8 @@ export default function AttemptPage() {
     }
   };
 
-  const fetchAttempt = async () => {
-    try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/user/attempts/${attemptId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`
-          }
-        }
-      );
-      const data = await res.json();
-      
-      setUserEmail(data.userEmail || "");
-      setUserId(data.userId || "");
-      setCurrent(data.currentQuestionIndex || 0);
-      setTimeLeft(data.remainingTime);
-      setIsPaused(data.status === "paused" ? true : false);
-      
-      // Process questions to map selectedOption IDs to text for display
-      const processedQuestions = data.questions.map(q => {
-        // Find the option text from the selectedOption ID
-        let selectedOptionText = null;
-        let selectedOptionId = q.selectedOption || null;
-        
-        if (selectedOptionId && q.options) {
-          const foundOption = q.options.find(opt => opt.id === selectedOptionId);
-          if (foundOption) {
-            selectedOptionText = foundOption.en; // Store English text as base
-          }
-        }
-        
-        return {
-          ...q,
-          selectedOption: selectedOptionText,
-          selectedOptionId: selectedOptionId
-        };
-      });
-      
-      setQuestions(processedQuestions);
-      
-      // Initialize marked for review
-      const marked = data.questions
-        .filter(q => q.isMarkedForReview)
-        .map(q => q._id);
-      setMarkedForReview(marked);
-    } catch (err) {
-      console.error("Error fetching attempt:", err);
-    }
-  };
-
   const saveAnswerToDB = async (questionId, selectedOptionId, isMarkedForReview, currentQuestionIndex) => {
-    if (!attemptId) return;
+    if (!attemptId) return false;
 
     setSavingAnswer(true);
     try {
@@ -180,7 +216,7 @@ export default function AttemptPage() {
           },
           body: JSON.stringify({
             questionId,
-            selectedOption: selectedOptionId, // Send option ID
+            selectedOption: selectedOptionId,
             isMarkedForReview,
             currentQuestionIndex,
             timeSpent: 0
@@ -191,12 +227,16 @@ export default function AttemptPage() {
       if (!res.ok) {
         const data = await res.json();
         if (data.msg === "Time is over") {
-          alert("Time's up! Submitting test...");
-          submitTest();
+          submitTest(true);
+          return false;
         }
+        return false;
       }
+      return true;
     } catch (err) {
       console.error("Failed to save answer:", err);
+      setIsOnline(false);
+      return false;
     } finally {
       setSavingAnswer(false);
     }
@@ -214,7 +254,7 @@ export default function AttemptPage() {
     };
     setQuestions(updatedQuestions);
 
-    // Save to database with option ID
+    // Save to database
     await saveAnswerToDB(questionId, selectedOptionId, markedForReview.includes(questionId), current);
   };
 
@@ -227,7 +267,6 @@ export default function AttemptPage() {
     }
     setMarkedForReview(newMarked);
 
-    // Save to database
     const currentQ = questions[current];
     const optionId = currentQ?.selectedOptionId || null;
     await saveAnswerToDB(questionId, optionId, newMarked.includes(questionId), current);
@@ -248,6 +287,7 @@ export default function AttemptPage() {
         }
       );
       if (res.ok) {
+        if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
         setIsPaused(true);
       }
     } catch (err) {
@@ -260,18 +300,16 @@ export default function AttemptPage() {
       const res = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/api/user/attempts/${attemptId}/resume`,
         {
+          method: "GET",
           headers: {
             Authorization: `Bearer ${localStorage.getItem("token")}`
           }
         }
       );
 
-      const data = await res.json();
-
       if (res.ok) {
-        setTimeLeft(data.remainingTime);
-        setIsPaused(false);
         await fetchAttempt();
+        setIsPaused(false);
       }
     } catch (err) {
       console.error(err);
@@ -280,7 +318,7 @@ export default function AttemptPage() {
 
   const nextQuestion = async () => {
     if (current < questions.length - 1) {
-      // Save current position
+      // Save current answer before moving
       if (attemptId && questions[current]) {
         const optionId = questions[current]?.selectedOptionId || null;
         await saveAnswerToDB(
@@ -296,7 +334,7 @@ export default function AttemptPage() {
 
   const prevQuestion = async () => {
     if (current > 0) {
-      // Save current position
+      // Save current answer before moving
       if (attemptId && questions[current]) {
         const optionId = questions[current]?.selectedOptionId || null;
         await saveAnswerToDB(
@@ -327,10 +365,13 @@ export default function AttemptPage() {
     }
   };
 
-  const submitTest = async () => {
-    if (!confirm("Are you sure you want to submit the test?")) return;
+  const submitTest = async (autoSubmit = false) => {
+    if (!autoSubmit && !confirm("Are you sure you want to submit the test?")) return;
 
     setSubmitting(true);
+    if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+    if (syncIntervalRef.current) clearInterval(syncIntervalRef.current);
+    
     try {
       const res = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/api/user/attempts/${attemptId}/submit`,
@@ -358,17 +399,14 @@ export default function AttemptPage() {
   };
 
   const formatTime = (seconds) => {
-    if (!seconds) return "00:00";
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
+    if (!seconds && seconds !== 0) return "00:00";
+    const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
-    if (hours > 0) {
-      return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-    }
-    return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
   const getTimeColor = () => {
+    if (!timeLeft) return "text-gray-500";
     if (timeLeft < 300) return "text-red-700 animate-pulse dark:text-red-400";
     if (timeLeft < 600) return "text-red-600 dark:text-yellow-400";
     return "text-gray-500 dark:text-green-400";
@@ -378,7 +416,7 @@ export default function AttemptPage() {
     const question = questions[index];
     if (!question) return "not-visited";
 
-    if (markedForReview.includes(question._id) && question.selectedOption) {
+    if (markedForReview.includes(question._id) && question.selectedOptionId) {
       return "answered-marked";
     }
 
@@ -386,7 +424,7 @@ export default function AttemptPage() {
       return "marked";
     }
 
-    if (question.selectedOption) {
+    if (question.selectedOptionId) {
       return "answered";
     }
 
@@ -409,10 +447,10 @@ export default function AttemptPage() {
   };
 
   const currentQ = questions[current];
-  const answeredCount = questions.filter(q => q.selectedOption).length;
-  const progress = (answeredCount / questions.length) * 100;
+  const answeredCount = questions.filter(q => q.selectedOptionId).length;
+  const progress = questions.length > 0 ? (answeredCount / questions.length) * 100 : 0;
 
-  if (!currentQ) return (
+  if (!currentQ && !submitting) return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center">
       <div className="text-center">
         <Loader2 className="w-12 h-12 text-blue-500 animate-spin mx-auto mb-4" />
@@ -443,6 +481,26 @@ export default function AttemptPage() {
           </div>
 
           <div className="flex items-center gap-2 md:gap-4">
+            {/* Sync Status */}
+            {syncStatus === "syncing" && (
+              <div className="flex items-center gap-1 text-xs text-blue-500">
+                <Loader2 size={14} className="animate-spin" />
+                <span className="hidden sm:inline">Syncing...</span>
+              </div>
+            )}
+            {syncStatus === "offline" && (
+              <div className="flex items-center gap-1 text-xs text-red-500">
+                <WifiOff size={14} />
+                <span className="hidden sm:inline">Offline</span>
+              </div>
+            )}
+            {isOnline && syncStatus === "synced" && (
+              <div className="flex items-center gap-1 text-xs text-green-500">
+                <Wifi size={14} />
+                <span className="hidden sm:inline">Synced</span>
+              </div>
+            )}
+
             {/* Language Selector */}
             <div className="flex items-center gap-2 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700">
               <Globe size={16} className="text-gray-500" />
@@ -577,7 +635,7 @@ export default function AttemptPage() {
 
         {/* Question Area */}
         <div className="flex-1 md:ml-72 p-6 relative">
-          {/* Watermark Container */}
+          {/* Watermark Container - Kept as is */}
           <div className="absolute inset-0 pointer-events-none overflow-hidden">
             <div className="absolute top-0 left-0 w-full h-full">
               <div className="grid grid-cols-3 gap-8 p-8">
@@ -668,7 +726,7 @@ export default function AttemptPage() {
 
                 {current === questions.length - 1 ? (
                   <button
-                    onClick={submitTest}
+                    onClick={() => submitTest(false)}
                     disabled={submitting}
                     className="px-6 py-2 bg-green-700 flex items-center gap-2 text-stone-50 rounded-lg"
                   >

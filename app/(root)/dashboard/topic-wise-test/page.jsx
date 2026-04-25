@@ -75,6 +75,7 @@ export default function SubjectsPage() {
           headers: { Authorization: `Bearer ${token}` }
         }
       );
+      
       setSubjects(response.data.data || []);
       setFilteredSubjects(response.data.data || []);
     } catch (error) {

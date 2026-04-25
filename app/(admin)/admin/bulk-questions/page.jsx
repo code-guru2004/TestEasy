@@ -19,7 +19,9 @@ import {
   BookOpen,
   CheckSquare,
   AlertTriangle,
-  Info
+  Info,
+  Code,
+  FileText
 } from "lucide-react";
 
 export default function BulkUploadQuestionsPage() {
@@ -32,9 +34,11 @@ export default function BulkUploadQuestionsPage() {
   const [filteredTopics, setFilteredTopics] = useState([]);
   const [jsonFile, setJsonFile] = useState(null);
   const [jsonPreview, setJsonPreview] = useState(null);
+  const [jsonInput, setJsonInput] = useState("");
   const [uploadProgress, setUploadProgress] = useState(0);
   const [notification, setNotification] = useState({ show: false, type: "", message: "" });
   const [results, setResults] = useState(null);
+  const [inputMethod, setInputMethod] = useState("file"); // "file" or "text"
   
   // Duplicate handling options
   const [skipDuplicates, setSkipDuplicates] = useState(true);
@@ -77,7 +81,7 @@ export default function BulkUploadQuestionsPage() {
     if (jsonPreview) {
       validateJSON();
     }
-  }, [jsonPreview, formData.subject, formData.topic]);
+  }, [jsonPreview]);
 
   const showNotification = (type, message) => {
     setNotification({ show: true, type, message });
@@ -110,6 +114,28 @@ export default function BulkUploadQuestionsPage() {
     }
   };
 
+  const processJsonData = (jsonData) => {
+    // Validate JSON structure
+    if (!Array.isArray(jsonData)) {
+      showNotification("error", "JSON must be an array of questions");
+      return false;
+    }
+
+    if (jsonData.length === 0) {
+      showNotification("error", "JSON array cannot be empty");
+      return false;
+    }
+
+    if (jsonData.length > 500) {
+      showNotification("error", "Maximum 500 questions allowed per upload");
+      return false;
+    }
+
+    setJsonPreview(jsonData);
+    showNotification("success", `Loaded ${jsonData.length} questions successfully`);
+    return true;
+  };
+
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -128,31 +154,31 @@ export default function BulkUploadQuestionsPage() {
     reader.onload = (event) => {
       try {
         const jsonData = JSON.parse(event.target.result);
-        
-        // Validate JSON structure
-        if (!Array.isArray(jsonData)) {
-          showNotification("error", "JSON must be an array of questions");
-          return;
+        if (processJsonData(jsonData)) {
+          setJsonFile(file);
+          setJsonInput("");
         }
-
-        if (jsonData.length === 0) {
-          showNotification("error", "JSON array cannot be empty");
-          return;
-        }
-
-        if (jsonData.length > 500) {
-          showNotification("error", "Maximum 500 questions allowed per upload");
-          return;
-        }
-
-        setJsonFile(file);
-        setJsonPreview(jsonData);
-        showNotification("success", `Loaded ${jsonData.length} questions successfully`);
       } catch (error) {
         showNotification("error", "Invalid JSON format: " + error.message);
       }
     };
     reader.readAsText(file);
+  };
+
+  const handleTextInput = () => {
+    if (!jsonInput.trim()) {
+      showNotification("error", "Please enter JSON data");
+      return;
+    }
+
+    try {
+      const jsonData = JSON.parse(jsonInput);
+      if (processJsonData(jsonData)) {
+        setJsonFile(null);
+      }
+    } catch (error) {
+      showNotification("error", "Invalid JSON format: " + error.message);
+    }
   };
 
   const validateJSON = () => {
@@ -227,7 +253,7 @@ export default function BulkUploadQuestionsPage() {
     e.preventDefault();
     
     if (!jsonPreview) {
-      showNotification("error", "Please upload a JSON file first");
+      showNotification("error", "Please provide JSON data first");
       return;
     }
     
@@ -297,7 +323,11 @@ export default function BulkUploadQuestionsPage() {
       
       // Don't clear results immediately to let user see them
       setTimeout(() => {
-        setJsonFile(null);
+        if (inputMethod === "file") {
+          setJsonFile(null);
+        } else {
+          setJsonInput("");
+        }
         setJsonPreview(null);
         setValidation({ isValid: false, errors: [], warnings: [] });
         setFormData(prev => ({ ...prev, topic: "" }));
@@ -375,8 +405,9 @@ export default function BulkUploadQuestionsPage() {
     linkElement.click();
   };
 
-  const removeFile = () => {
+  const removeData = () => {
     setJsonFile(null);
+    setJsonInput("");
     setJsonPreview(null);
     setValidation({ isValid: false, errors: [], warnings: [] });
     setResults(null);
@@ -419,6 +450,40 @@ export default function BulkUploadQuestionsPage() {
             >
               <Download size={18} />
               <span>Download Template</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Input Method Toggle */}
+        <div className="mb-6 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-2">
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                setInputMethod("file");
+                removeData();
+              }}
+              className={`flex-1 flex items-center justify-center space-x-2 px-4 py-2 rounded-lg transition ${
+                inputMethod === "file"
+                  ? "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300"
+                  : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
+              }`}
+            >
+              <Upload size={18} />
+              <span>Upload JSON File</span>
+            </button>
+            <button
+              onClick={() => {
+                setInputMethod("text");
+                removeData();
+              }}
+              className={`flex-1 flex items-center justify-center space-x-2 px-4 py-2 rounded-lg transition ${
+                inputMethod === "text"
+                  ? "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300"
+                  : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
+              }`}
+            >
+              <Code size={18} />
+              <span>Paste JSON Array</span>
             </button>
           </div>
         </div>
@@ -554,61 +619,117 @@ export default function BulkUploadQuestionsPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Upload Form */}
           <div className="space-y-6">
-            {/* File Upload Section */}
+            {/* JSON Input Section */}
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                Upload JSON File <span className="text-red-500">*</span>
+                {inputMethod === "file" ? "Upload JSON File" : "Paste JSON Array"} <span className="text-red-500">*</span>
               </label>
               
-              {!jsonFile ? (
-                <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-gray-300 dark:border-gray-600 border-dashed rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition group">
-                  <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                    <Upload className="w-12 h-12 text-gray-400 mb-3 group-hover:text-purple-500 transition" />
-                    <p className="text-sm text-gray-500 dark:text-gray-400">
-                      Click to upload JSON file
-                    </p>
-                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
-                      JSON array format, max 500 questions, up to 10MB
-                    </p>
-                  </div>
-                  <input
-                    type="file"
-                    className="hidden"
-                    accept="application/json"
-                    onChange={handleFileUpload}
-                    disabled={loading}
-                  />
-                </label>
-              ) : (
-                <div className="border-2 border-purple-200 dark:border-purple-800 rounded-lg p-4 bg-purple-50 dark:bg-purple-900/20">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <FileJson className="text-purple-600 dark:text-purple-400" size={24} />
-                      <div>
-                        <p className="font-medium text-gray-900 dark:text-white">{jsonFile.name}</p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">
-                          {(jsonFile.size / 1024).toFixed(2)} KB • {jsonPreview?.length || 0} questions
+              {inputMethod === "file" ? (
+                !jsonFile ? (
+                  <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-gray-300 dark:border-gray-600 border-dashed rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition group">
+                    <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                      <Upload className="w-12 h-12 text-gray-400 mb-3 group-hover:text-purple-500 transition" />
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                        Click to upload JSON file
+                      </p>
+                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
+                        JSON array format, max 500 questions, up to 10MB
+                      </p>
+                    </div>
+                    <input
+                      type="file"
+                      className="hidden"
+                      accept="application/json"
+                      onChange={handleFileUpload}
+                      disabled={loading}
+                    />
+                  </label>
+                ) : (
+                  <div className="border-2 border-purple-200 dark:border-purple-800 rounded-lg p-4 bg-purple-50 dark:bg-purple-900/20">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-3">
+                        <FileJson className="text-purple-600 dark:text-purple-400" size={24} />
+                        <div>
+                          <p className="font-medium text-gray-900 dark:text-white">{jsonFile.name}</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
+                            {(jsonFile.size / 1024).toFixed(2)} KB • {jsonPreview?.length || 0} questions
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={removeData}
+                        className="p-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition"
+                      >
+                        <X size={18} />
+                      </button>
+                    </div>
+                    {uploadProgress > 0 && uploadProgress < 100 && (
+                      <div className="mt-3">
+                        <div className="bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
+                          <div 
+                            className="bg-purple-600 h-2 transition-all duration-300"
+                            style={{ width: `${uploadProgress}%` }}
+                          />
+                        </div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          Uploading... {uploadProgress}%
                         </p>
                       </div>
-                    </div>
-                    <button
-                      onClick={removeFile}
-                      className="p-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition"
-                    >
-                      <X size={18} />
-                    </button>
+                    )}
                   </div>
-                  {uploadProgress > 0 && uploadProgress < 100 && (
-                    <div className="mt-3">
-                      <div className="bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
-                        <div 
-                          className="bg-purple-600 h-2 transition-all duration-300"
-                          style={{ width: `${uploadProgress}%` }}
-                        />
+                )
+              ) : (
+                <div>
+                  <textarea
+                    value={jsonInput}
+                    onChange={(e) => setJsonInput(e.target.value)}
+                    placeholder='[
+  {
+    "questionText": {
+      "en": "What is the capital of France?"
+    },
+    "options": [
+      { "en": "London" },
+      { "en": "Berlin" },
+      { "en": "Paris" },
+      { "en": "Madrid" }
+    ],
+    "correctAnswer": 2
+  }
+]'
+                    rows={12}
+                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white font-mono text-sm"
+                    disabled={loading}
+                  />
+                  {!jsonPreview && jsonInput && (
+                    <button
+                      onClick={handleTextInput}
+                      disabled={loading}
+                      className="mt-3 w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition disabled:opacity-50"
+                    >
+                      Process JSON
+                    </button>
+                  )}
+                  {jsonPreview && (
+                    <div className="mt-3 border-2 border-purple-200 dark:border-purple-800 rounded-lg p-4 bg-purple-50 dark:bg-purple-900/20">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                          <Code className="text-purple-600 dark:text-purple-400" size={24} />
+                          <div>
+                            <p className="font-medium text-gray-900 dark:text-white">JSON Array Loaded</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                              {jsonPreview.length} questions loaded
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={removeData}
+                          className="p-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition"
+                        >
+                          <X size={18} />
+                        </button>
                       </div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        Uploading... {uploadProgress}%
-                      </p>
                     </div>
                   )}
                 </div>

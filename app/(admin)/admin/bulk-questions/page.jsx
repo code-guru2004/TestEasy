@@ -280,8 +280,8 @@ export default function BulkUploadQuestionsPage() {
       questionImage: q.questionImage || "",
       options: q.options.map(opt => ({
         en: opt.en,
-        hi: opt.hi || "",
-        bn: opt.bn || ""
+        hi: opt.hi || opt.en,
+        bn: opt.bn || opt.en
       })),
       correctAnswer: q.correctAnswer,
       difficulty: q.difficulty || formData.defaultDifficulty || undefined,

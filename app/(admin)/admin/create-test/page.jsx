@@ -25,6 +25,53 @@ import {
   Trash2,
   Repeat
 } from "lucide-react";
+// Helper function to convert local datetime to IST
+const convertToIST = (localDateTimeStr) => {
+  if (!localDateTimeStr) return localDateTimeStr;
+  
+  // Parse the local datetime string (from datetime-local input)
+  // The format is "YYYY-MM-DDThh:mm"
+  const [date, time] = localDateTimeStr.split('T');
+  const [year, month, day] = date.split('-');
+  const [hours, minutes] = time.split(':');
+  
+  // Create a date object in local timezone
+  const localDate = new Date(year, month - 1, day, hours, minutes);
+  
+  // Convert to IST (UTC+5:30)
+  // Get UTC time and add 5 hours 30 minutes
+  const istTimestamp = localDate.getTime() + (5.5 * 60 * 60 * 1000);
+  const istDate = new Date(istTimestamp);
+  
+  // Format as ISO string without milliseconds and Z
+  // Format: YYYY-MM-DDTHH:MM:SS
+  const year2 = istDate.getUTCFullYear();
+  const month2 = String(istDate.getUTCMonth() + 1).padStart(2, '0');
+  const day2 = String(istDate.getUTCDate()).padStart(2, '0');
+  const hours2 = String(istDate.getUTCHours()).padStart(2, '0');
+  const minutes2 = String(istDate.getUTCMinutes()).padStart(2, '0');
+  const seconds2 = String(istDate.getUTCSeconds()).padStart(2, '0');
+  
+  return `${year2}-${month2}-${day2}T${hours2}:${minutes2}:${seconds2}`;
+};
+
+// Optional: Display dates in IST for the form inputs
+const formatDateForInput = (isoDateStr) => {
+  if (!isoDateStr) return '';
+  
+  // Parse the date string (assuming it's in IST format)
+  // Convert to local datetime-local format
+  const date = new Date(isoDateStr);
+  
+  // Adjust for timezone offset to show correct value in input
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+};
 
 export default function CreateTestForm() {
   const router = useRouter();
@@ -309,15 +356,15 @@ export default function CreateTestForm() {
     setLoading(true);
     setMessage("");
     setMessageType("");
-
+  
     try {
       let payload = {};
-
+  
       // Case 1: Instance from template
       if (form.parentTest) {
         payload = {
           parentTest: form.parentTest,
-          validForDate: form.validForDate
+          validForDate: form.validForDate // Keep as is for now
         };
       } 
       // Case 2: Template or Normal test
@@ -337,7 +384,7 @@ export default function CreateTestForm() {
           isTemplate: form.isTemplate,
           isPublished: form.isPublished
         };
-
+  
         // Add sections if hasSections
         if (form.hasSections) {
           payload.sections = form.sections.map(s => ({
@@ -347,7 +394,7 @@ export default function CreateTestForm() {
         } else {
           payload.duration = Number(form.duration);
         }
-
+  
         // Add recurrence for templates
         if (form.isTemplate && form.scheduleType !== "one-time") {
           payload.recurrence = {
@@ -356,13 +403,18 @@ export default function CreateTestForm() {
             dayOfMonth: form.recurrence.dayOfMonth
           };
         }
-
-        // Add time range for one-time tests
+  
+        // Add time range for one-time tests with IST conversion
         if (!form.isTemplate && form.scheduleType === "one-time") {
-          payload.startTime = form.startTime;
-          payload.endTime = form.endTime;
+          // Convert local datetime to IST
+          if (form.startTime) {
+            payload.startTime = convertToIST(form.startTime);
+          }
+          if (form.endTime) {
+            payload.endTime = convertToIST(form.endTime);
+          }
         }
-
+  
         // Add test type specific fields
         if (form.testType === "topic") {
           payload.topic = form.topic;
@@ -373,7 +425,12 @@ export default function CreateTestForm() {
           payload.subjects = form.subjects;
         }
       }
-
+  
+      // For template instances, convert validForDate to IST
+      if (form.parentTest && form.validForDate) {
+        payload.validForDate = convertToIST(form.validForDate);
+      }
+  
       const response = await axios.post(
         `${process.env.NEXT_PUBLIC_API_URL}/api/tests/draft`,
         payload,
@@ -381,7 +438,7 @@ export default function CreateTestForm() {
           headers: { Authorization: `Bearer ${token}` }
         }
       );
-
+  
       setMessageType("success");
       if (form.parentTest) {
         setMessage("✅ Test instance created successfully!");
@@ -407,7 +464,7 @@ export default function CreateTestForm() {
       setMessageType("error");
       setMessage("❌ " + (err.response?.data?.message || err.message));
     }
-
+  
     setLoading(false);
   };
 

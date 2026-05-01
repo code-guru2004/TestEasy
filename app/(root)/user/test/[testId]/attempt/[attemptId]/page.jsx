@@ -43,11 +43,16 @@ export default function AttemptPage() {
   const [selectedLanguage, setSelectedLanguage] = useState("en");
   const [isOnline, setIsOnline] = useState(true);
   const [syncStatus, setSyncStatus] = useState("synced");
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
 
   // Refs
   const timerIntervalRef = useRef(null);
   const syncIntervalRef = useRef(null);
   const isMountedRef = useRef(true);
+  const isSavingRef = useRef(false);
+  const pendingSaveRef = useRef(null);
+  const currentQuestionIndexRef = useRef(0);
+  const hasNavigatedRef = useRef(false);
 
   // Languages configuration
   const languages = [
@@ -69,6 +74,11 @@ export default function AttemptPage() {
     return option[selectedLanguage] || option.en || "—";
   }, [selectedLanguage]);
 
+  // Update ref when current changes
+  useEffect(() => {
+    currentQuestionIndexRef.current = current;
+  }, [current]);
+
   // 🚨 SECURITY CHECK
   useEffect(() => {
     if (agreed !== "true") {
@@ -87,8 +97,73 @@ export default function AttemptPage() {
     };
   }, []);
 
-  // Fetch attempt data
-  const fetchAttempt = useCallback(async (showSync = true) => {
+  // Save answer to DB (non-blocking)
+  const saveAnswerToDB = async (questionId, selectedOptionId, isMarkedForReview, currentQuestionIndex, isSilent = false) => {
+    if (!attemptId) return false;
+    
+    // Store the save operation in ref to prevent race conditions
+    const saveOperation = async () => {
+      // Don't show saving indicator for silent saves (during navigation)
+      if (!isSilent) {
+        setSavingAnswer(true);
+      }
+      
+      try {
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/user/attempts/${attemptId}/answer`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${localStorage.getItem("token")}`
+            },
+            body: JSON.stringify({
+              questionId,
+              selectedOption: selectedOptionId,
+              isMarkedForReview,
+              currentQuestionIndex,
+              timeSpent: 0
+            })
+          }
+        );
+
+        if (!res.ok) {
+          const data = await res.json();
+          if (data.msg === "Time is over") {
+            submitTest(true);
+            return false;
+          }
+          return false;
+        }
+        return true;
+      } catch (err) {
+        console.error("Failed to save answer:", err);
+        setIsOnline(false);
+        setSyncStatus("offline");
+        return false;
+      } finally {
+        if (!isSilent) {
+          setSavingAnswer(false);
+        }
+        isSavingRef.current = false;
+      }
+    };
+
+    // Store the promise to handle sequential saves properly
+    const previousSave = pendingSaveRef.current;
+    const currentSave = saveOperation();
+    
+    if (previousSave) {
+      pendingSaveRef.current = previousSave.then(() => currentSave);
+    } else {
+      pendingSaveRef.current = currentSave;
+    }
+    
+    return pendingSaveRef.current;
+  };
+
+  // Fetch attempt data - ONLY updates current question on initial load
+  const fetchAttempt = useCallback(async (showSync = true, isInitial = false) => {
     if (!attemptId) return;
 
     if (showSync) {
@@ -117,15 +192,32 @@ export default function AttemptPage() {
       
       setUserEmail(data.user?.email || "");
       setUserId(data.user?.id || "");
-      setCurrent(data.attempt.currentQuestionIndex || 0);
+      
+      // ONLY update current question index on initial load OR when resuming from pause
+      if (isInitial || isPaused) {
+        const savedIndex = data.attempt.currentQuestionIndex || 0;
+        // Don't update if user has manually navigated away since last sync
+        if (!hasNavigatedRef.current || isInitial) {
+          setCurrent(savedIndex);
+          currentQuestionIndexRef.current = savedIndex;
+        }
+      }
+      
       setTimeLeft(data.attempt.remainingTime);
       setIsPaused(data.attempt.status === "paused");
       
-      // Process questions
-      const processedQuestions = data.questions.map(q => ({
-        ...q,
-        selectedOptionId: q.selectedOption || null
-      }));
+      // Process questions - merge saved answers with current state
+      const processedQuestions = data.questions.map((q, idx) => {
+        const existingQuestion = questions[idx];
+        return {
+          ...q,
+          // Preserve local changes if they exist and are more recent
+          selectedOptionId: existingQuestion?.selectedOptionId !== undefined && !isInitial 
+            ? existingQuestion.selectedOptionId 
+            : (q.selectedOption || null)
+        };
+      });
+      
       setQuestions(processedQuestions);
       
       // Initialize marked for review
@@ -136,25 +228,32 @@ export default function AttemptPage() {
 
       setSyncStatus("synced");
       setIsOnline(true);
+      
+      // Reset navigation flag after sync
+      if (!isInitial) {
+        setTimeout(() => {
+          hasNavigatedRef.current = false;
+        }, 500);
+      }
     } catch (err) {
       console.error("Error fetching attempt:", err);
       setIsOnline(false);
       setSyncStatus("offline");
     }
-  }, [attemptId, testId, router]);
+  }, [attemptId, testId, router, questions, isPaused]);
 
-  // Auto sync every 10 seconds
+  // Auto sync every 10 seconds (does NOT update current question index)
   useEffect(() => {
-    if (!isPaused && !submitting && isOnline && attemptId) {
+    if (!isPaused && !submitting && isOnline && attemptId && !isInitialLoad) {
       syncIntervalRef.current = setInterval(() => {
-        fetchAttempt(false);
+        fetchAttempt(false, false); // isInitial = false, won't update current question
       }, 10000);
       
       return () => {
         if (syncIntervalRef.current) clearInterval(syncIntervalRef.current);
       };
     }
-  }, [isPaused, submitting, isOnline, attemptId, fetchAttempt]);
+  }, [isPaused, submitting, isOnline, attemptId, fetchAttempt, isInitialLoad]);
 
   // Timer effect
   useEffect(() => {
@@ -179,10 +278,11 @@ export default function AttemptPage() {
   // Initial load
   useEffect(() => {
     if (attemptId) {
-      fetchAttempt();
+      fetchAttempt(true, true); // isInitial = true, will update current question
+      setIsInitialLoad(false);
       fetchTestDetails();
     }
-  }, [attemptId, fetchAttempt]);
+  }, [attemptId]);
 
   const fetchTestDetails = async () => {
     try {
@@ -201,51 +301,10 @@ export default function AttemptPage() {
     }
   };
 
-  const saveAnswerToDB = async (questionId, selectedOptionId, isMarkedForReview, currentQuestionIndex) => {
-    if (!attemptId) return false;
-
-    setSavingAnswer(true);
-    try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/user/attempts/${attemptId}/answer`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem("token")}`
-          },
-          body: JSON.stringify({
-            questionId,
-            selectedOption: selectedOptionId,
-            isMarkedForReview,
-            currentQuestionIndex,
-            timeSpent: 0
-          })
-        }
-      );
-
-      if (!res.ok) {
-        const data = await res.json();
-        if (data.msg === "Time is over") {
-          submitTest(true);
-          return false;
-        }
-        return false;
-      }
-      return true;
-    } catch (err) {
-      console.error("Failed to save answer:", err);
-      setIsOnline(false);
-      return false;
-    } finally {
-      setSavingAnswer(false);
-    }
-  };
-
   const handleAnswer = async (questionId, selectedOptionId, selectedOptionText) => {
     const currentQ = questions[current];
 
-    // Update local state
+    // Update local state immediately
     const updatedQuestions = [...questions];
     updatedQuestions[current] = {
       ...currentQ,
@@ -254,8 +313,8 @@ export default function AttemptPage() {
     };
     setQuestions(updatedQuestions);
 
-    // Save to database
-    await saveAnswerToDB(questionId, selectedOptionId, markedForReview.includes(questionId), current);
+    // Save to database asynchronously (non-blocking)
+    saveAnswerToDB(questionId, selectedOptionId, markedForReview.includes(questionId), current, false);
   };
 
   const toggleMarkForReview = async (questionId) => {
@@ -269,7 +328,7 @@ export default function AttemptPage() {
 
     const currentQ = questions[current];
     const optionId = currentQ?.selectedOptionId || null;
-    await saveAnswerToDB(questionId, optionId, newMarked.includes(questionId), current);
+    saveAnswerToDB(questionId, optionId, newMarked.includes(questionId), current, false);
   };
 
   const pauseTest = async () => {
@@ -308,7 +367,7 @@ export default function AttemptPage() {
       );
 
       if (res.ok) {
-        await fetchAttempt();
+        await fetchAttempt(true, true); // Resume should update current question
         setIsPaused(false);
       }
     } catch (err) {
@@ -318,14 +377,18 @@ export default function AttemptPage() {
 
   const nextQuestion = async () => {
     if (current < questions.length - 1) {
-      // Save current answer before moving
+      // Mark that user has navigated
+      hasNavigatedRef.current = true;
+      
+      // Save current answer before moving (silent save)
       if (attemptId && questions[current]) {
         const optionId = questions[current]?.selectedOptionId || null;
-        await saveAnswerToDB(
+        saveAnswerToDB(
           questions[current]._id,
           optionId,
           markedForReview.includes(questions[current]._id),
-          current
+          current,
+          true // Silent save - won't show loading indicator
         );
       }
       setCurrent(current + 1);
@@ -334,14 +397,18 @@ export default function AttemptPage() {
 
   const prevQuestion = async () => {
     if (current > 0) {
-      // Save current answer before moving
+      // Mark that user has navigated
+      hasNavigatedRef.current = true;
+      
+      // Save current answer before moving (silent save)
       if (attemptId && questions[current]) {
         const optionId = questions[current]?.selectedOptionId || null;
-        await saveAnswerToDB(
+        saveAnswerToDB(
           questions[current]._id,
           optionId,
           markedForReview.includes(questions[current]._id),
-          current
+          current,
+          true // Silent save - won't show loading indicator
         );
       }
       setCurrent(current - 1);
@@ -349,14 +416,18 @@ export default function AttemptPage() {
   };
 
   const goToQuestion = async (index) => {
-    // Save current position before moving
+    // Mark that user has navigated
+    hasNavigatedRef.current = true;
+    
+    // Save current position before moving (silent save)
     if (attemptId && questions[current]) {
       const optionId = questions[current]?.selectedOptionId || null;
       await saveAnswerToDB(
         questions[current]._id,
         optionId,
         markedForReview.includes(questions[current]._id),
-        current
+        current,
+        true // Silent save
       );
     }
     setCurrent(index);
@@ -717,7 +788,7 @@ export default function AttemptPage() {
               <div className="flex justify-between gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
                 <button
                   onClick={prevQuestion}
-                  disabled={current === 0 || savingAnswer}
+                  disabled={current === 0}
                   className="px-6 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
                   <ChevronLeft size={18} />
@@ -740,7 +811,6 @@ export default function AttemptPage() {
                 ) : (
                   <button
                     onClick={nextQuestion}
-                    disabled={savingAnswer}
                     className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2"
                   >
                     Save & Next

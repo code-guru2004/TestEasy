@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 
-export default function AttemptPage() {
+export default function SectionalAttemptPage() {
   const { testId, attemptId } = useParams();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -49,12 +49,18 @@ export default function AttemptPage() {
   const [selectedLanguage, setSelectedLanguage] = useState("en");
   const [isOnline, setIsOnline] = useState(true);
   const [syncStatus, setSyncStatus] = useState("synced");
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
 
   // Refs
   const timerIntervalRef = useRef(null);
   const syncIntervalRef = useRef(null);
   const currentAttemptIdRef = useRef(attemptId);
   const isMountedRef = useRef(true);
+  const isSavingRef = useRef(false);
+  const pendingSaveRef = useRef(null);
+  const currentSectionIndexRef = useRef(0);
+  const currentQuestionIndexRef = useRef(0);
+  const hasNavigatedRef = useRef(false);
 
   const languages = [
     { code: "en", name: "English", flag: "🇬🇧" },
@@ -75,6 +81,12 @@ export default function AttemptPage() {
     return option[selectedLanguage] || option.en || "—";
   }, [selectedLanguage]);
 
+  // Update refs when state changes
+  useEffect(() => {
+    currentSectionIndexRef.current = currentSectionIndex;
+    currentQuestionIndexRef.current = currentQuestionIndex;
+  }, [currentSectionIndex, currentQuestionIndex]);
+
   // Security check
   useEffect(() => {
     if (agreed !== "true") {
@@ -93,9 +105,88 @@ export default function AttemptPage() {
     };
   }, []);
 
-  // Fetch attempt data (Main sync API)
-  // Fetch attempt data (Main sync API)
-  const fetchAttempt = useCallback(async (showSync = true) => {
+  // Save answer (non-blocking)
+  const saveAnswer = async (questionId, selectedOptionId, isMarked, isSilent = false) => {
+    if (!currentAttemptIdRef.current) return false;
+
+    const saveOperation = async () => {
+      if (!isSilent) {
+        setSavingAnswer(true);
+      }
+      
+      try {
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/user/attempts/${currentAttemptIdRef.current}/answer`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${localStorage.getItem("token")}`
+            },
+            body: JSON.stringify({
+              questionId,
+              selectedOption: selectedOptionId,
+              isMarkedForReview: isMarked,
+              currentQuestionIndex: currentQuestionIndexRef.current,
+              sectionIndex: hasSections ? currentSectionIndexRef.current : undefined,
+              timeSpent: 0
+            })
+          }
+        );
+
+        if (!res.ok) {
+          const error = await res.json();
+          if (error.msg === "Time is over" || error.msg === "Section locked") {
+            await fetchAttempt(true, true);
+          }
+          return false;
+        }
+        return true;
+      } catch (err) {
+        console.error("Failed to save answer:", err);
+        setIsOnline(false);
+        setSyncStatus("offline");
+        return false;
+      } finally {
+        if (!isSilent) {
+          setSavingAnswer(false);
+        }
+        isSavingRef.current = false;
+      }
+    };
+
+    // Queue saves to prevent race conditions
+    const previousSave = pendingSaveRef.current;
+    const currentSave = saveOperation();
+    
+    if (previousSave) {
+      pendingSaveRef.current = previousSave.then(() => currentSave);
+    } else {
+      pendingSaveRef.current = currentSave;
+    }
+    
+    return pendingSaveRef.current;
+  };
+
+  const fetchTestDetails = async () => {
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/user/test/${testId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`
+          }
+        }
+      );
+      const data = await res.json();
+      setTestTitle(data.test?.title || "Test");
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Fetch attempt data - ONLY updates current position on initial load or resume
+  const fetchAttempt = useCallback(async (showSync = true, isInitial = false) => {
     if (!currentAttemptIdRef.current) return;
 
     if (showSync) {
@@ -115,29 +206,44 @@ export default function AttemptPage() {
       const data = await res.json();
 
       if (!isMountedRef.current) return;
-      //console.log(data)
-      // Check if test is completed (different response structure)
+
+      // Check if test is completed
       if (data.status === "completed" || data.attempt?.status === "completed") {
-        //console.log("submited")
-        // Test is already completed - redirect to results
         router.push(`/user/test/${testId}/result?attemptId=${currentAttemptIdRef.current}`);
         return;
       }
 
-      // Normal in-progress test response
+      // Update UI states
       setIsPaused(data.attempt.status === "paused");
       setUser(data.user);
       setAttempt(data.attempt);
       setHasSections(data.attempt.hasSections);
-      setCurrentSectionIndex(data.attempt.currentSectionIndex);
-      setCurrentQuestionIndex(data.attempt.currentQuestionIndex);
       setTimeLeft(data.attempt.remainingTime);
 
-      // Process questions
-      const processedQuestions = data.questions.map(q => ({
-        ...q,
-        selectedOptionId: q.selectedOption || null
-      }));
+      // ONLY update position on initial load OR when resuming from pause
+      if (isInitial || isPaused) {
+        const savedSectionIndex = data.attempt.currentSectionIndex || 0;
+        const savedQuestionIndex = data.attempt.currentQuestionIndex || 0;
+        
+        // Don't update if user has manually navigated since last sync
+        if (!hasNavigatedRef.current || isInitial) {
+          setCurrentSectionIndex(savedSectionIndex);
+          setCurrentQuestionIndex(savedQuestionIndex);
+          currentSectionIndexRef.current = savedSectionIndex;
+          currentQuestionIndexRef.current = savedQuestionIndex;
+        }
+      }
+
+      // Process questions - merge with local state
+      const processedQuestions = data.questions.map((q, idx) => {
+        const existingQuestion = questions[idx];
+        return {
+          ...q,
+          selectedOptionId: existingQuestion?.selectedOptionId !== undefined && !isInitial
+            ? existingQuestion.selectedOptionId
+            : (q.selectedOption || null)
+        };
+      });
       setQuestions(processedQuestions);
 
       // Set sections
@@ -153,81 +259,33 @@ export default function AttemptPage() {
 
       setSyncStatus("synced");
       setIsOnline(true);
+      
+      // Reset navigation flag after sync
+      if (!isInitial) {
+        setTimeout(() => {
+          hasNavigatedRef.current = false;
+        }, 500);
+      }
 
     } catch (err) {
       console.error("Error fetching attempt:", err);
       setIsOnline(false);
       setSyncStatus("offline");
     }
-  }, [testId, router]);
+  }, [testId, router, questions, isPaused]);
 
-  // Save answer
-  const saveAnswer = async (questionId, selectedOptionId, isMarked) => {
-    if (!currentAttemptIdRef.current) return;
-
-    setSavingAnswer(true);
-    try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/user/attempts/${currentAttemptIdRef.current}/answer`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem("token")}`
-          },
-          body: JSON.stringify({
-            questionId,
-            selectedOption: selectedOptionId,
-            isMarkedForReview: isMarked,
-            currentQuestionIndex,
-            sectionIndex: hasSections ? currentSectionIndex : undefined,
-            timeSpent: 0
-          })
-        }
-      );
-
-      if (!res.ok) {
-        const error = await res.json();
-        if (error.msg === "Time is over" || error.msg === "Section locked") {
-          await fetchAttempt();
-        }
-      }
-    } catch (err) {
-      console.error("Failed to save answer:", err);
-      setIsOnline(false);
-    } finally {
-      setSavingAnswer(false);
-    }
-  };
-
-  const fetchTestDetails = async () => {
-    try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/user/test/${testId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`
-          }
-        }
-      );
-      const data = await res.json();
-      setTestTitle(data.test?.title || "Test");
-    } catch (err) {
-      console.error(err);
-    }
-  };
-  // Auto sync every 15 seconds
+  // Auto sync every 15 seconds (does NOT update current position)
   useEffect(() => {
-    if (!isPaused && !submitting && isOnline) {
+    if (!isPaused && !submitting && isOnline && !isInitialLoad) {
       syncIntervalRef.current = setInterval(() => {
-        fetchAttempt(false);
+        fetchAttempt(false, false); // isInitial = false, won't update position
       }, 15000);
 
       return () => {
         if (syncIntervalRef.current) clearInterval(syncIntervalRef.current);
       };
     }
-  }, [isPaused, submitting, isOnline, fetchAttempt]);
+  }, [isPaused, submitting, isOnline, fetchAttempt, isInitialLoad]);
 
   // Timer effect
   useEffect(() => {
@@ -236,8 +294,7 @@ export default function AttemptPage() {
         setTimeLeft(prev => {
           if (prev <= 1) {
             clearInterval(timerIntervalRef.current);
-            // Time's up - sync to let backend handle section switch
-            fetchAttempt();
+            fetchAttempt(true, true); // Time's up - refresh with position update
             return 0;
           }
           return prev - 1;
@@ -253,48 +310,15 @@ export default function AttemptPage() {
   // Initial load
   useEffect(() => {
     if (testId && attemptId) {
-      // Start or resume test
-      // const startTest = async () => {
-      //   try {
-      //     const res = await fetch(
-      //       `${process.env.NEXT_PUBLIC_API_URL}/api/user/tests/${testId}/start`,
-      //       {
-      //         method: "POST",
-      //         headers: {
-      //           "Content-Type": "application/json",
-      //           Authorization: `Bearer ${localStorage.getItem("token")}`
-      //         }
-      //       }
-      //     );
-      //     const data = await res.json();
-      //     if (data.attemptId) {
-      //       currentAttemptIdRef.current = data.attemptId;
-      //       await fetchAttempt();
-      //     }
-
-      //     // Get test title
-      //     const testRes = await fetch(
-      //       `${process.env.NEXT_PUBLIC_API_URL}/api/user/test/${testId}`,
-      //       {
-      //         headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
-      //       }
-      //     );
-      //     const testData = await testRes.json();
-      //     setTestTitle(testData.test?.title || "Test");
-      //   } catch (err) {
-      //     console.error("Error starting test:", err);
-      //   }
-      // };
-      // startTest();
       fetchTestDetails();
-      fetchAttempt();
-
+      fetchAttempt(true, true); // isInitial = true, will update position
+      setIsInitialLoad(false);
     }
   }, [testId, attemptId]);
 
   // Handle answer selection
   const handleAnswer = async (questionId, selectedOptionId) => {
-    // Update local state
+    // Update local state immediately
     const updatedQuestions = [...questions];
     updatedQuestions[currentQuestionIndex] = {
       ...questions[currentQuestionIndex],
@@ -302,8 +326,8 @@ export default function AttemptPage() {
     };
     setQuestions(updatedQuestions);
 
-    // Save to backend
-    await saveAnswer(questionId, selectedOptionId, markedForReview.includes(questionId));
+    // Save to backend asynchronously (non-blocking)
+    await saveAnswer(questionId, selectedOptionId, markedForReview.includes(questionId), false);
   };
 
   // Toggle mark for review
@@ -315,12 +339,20 @@ export default function AttemptPage() {
     setMarkedForReview(newMarked);
 
     const currentQ = questions[currentQuestionIndex];
-    await saveAnswer(questionId, currentQ?.selectedOptionId || null, newMarked.includes(questionId));
+    await saveAnswer(questionId, currentQ?.selectedOptionId || null, newMarked.includes(questionId), false);
   };
 
   // Navigation - Previous Question
-  const prevQuestion = () => {
+  const prevQuestion = async () => {
     if (currentQuestionIndex > 0) {
+      // Mark that user has navigated
+      hasNavigatedRef.current = true;
+      
+      // Save current answer before moving (silent save)
+      const currentQ = questions[currentQuestionIndex];
+      if (currentQ) {
+        await saveAnswer(currentQ._id, currentQ.selectedOptionId || null, markedForReview.includes(currentQ._id), true);
+      }
       setCurrentQuestionIndex(currentQuestionIndex - 1);
     }
   };
@@ -328,12 +360,33 @@ export default function AttemptPage() {
   // Navigation - Next Question
   const nextQuestion = async () => {
     if (currentQuestionIndex < questions.length - 1) {
-      // Save current answer before moving
+      // Mark that user has navigated
+      hasNavigatedRef.current = true;
+      
+      // Save current answer before moving (silent save)
       const currentQ = questions[currentQuestionIndex];
       if (currentQ) {
-        await saveAnswer(currentQ._id, currentQ.selectedOptionId || null, markedForReview.includes(currentQ._id));
+        await saveAnswer(currentQ._id, currentQ.selectedOptionId || null, markedForReview.includes(currentQ._id), true);
       }
       setCurrentQuestionIndex(currentQuestionIndex + 1);
+    }
+  };
+
+  // Go to specific question
+  const goToQuestion = async (index) => {
+    // Mark that user has navigated
+    hasNavigatedRef.current = true;
+    
+    // Save current answer before moving (silent save)
+    const currentQ = questions[currentQuestionIndex];
+    if (currentQ) {
+      await saveAnswer(currentQ._id, currentQ.selectedOptionId || null, markedForReview.includes(currentQ._id), true);
+    }
+    setCurrentQuestionIndex(index);
+    
+    // Close sidebar on mobile
+    if (window.innerWidth < 768) {
+      setShowSidebar(false);
     }
   };
 
@@ -378,7 +431,7 @@ export default function AttemptPage() {
       );
 
       if (res.ok) {
-        await fetchAttempt();
+        await fetchAttempt(true, true); // Resume updates position
         setIsPaused(false);
       }
     } catch (err) {
@@ -386,7 +439,6 @@ export default function AttemptPage() {
     }
   };
 
-  // Submit test
   // Submit test
   const submitTest = async () => {
     if (!confirm("Are you sure you want to submit the test?")) return;
@@ -409,11 +461,9 @@ export default function AttemptPage() {
       const data = await res.json();
 
       if (res.ok) {
-        // Check if response has the completed structure
         if (data.status === "completed" || data.attempt?.status === "completed") {
           router.push(`/user/test/${testId}/result?attemptId=${currentAttemptIdRef.current}`);
         } else {
-          // Fallback - just redirect
           router.push(`/user/test/${testId}/result?attemptId=${currentAttemptIdRef.current}`);
         }
       } else {
@@ -639,7 +689,7 @@ export default function AttemptPage() {
                   return (
                     <button
                       key={q._id || idx}
-                      onClick={() => setCurrentQuestionIndex(idx)}
+                      onClick={() => goToQuestion(idx)}
                       className={`
                         relative w-8 h-8 rounded text-sm font-semibold
                         transition-all duration-200
@@ -671,7 +721,7 @@ export default function AttemptPage() {
 
         {/* Question Area */}
         <div className="flex-1 md:ml-72 p-6 relative">
-          {/* Watermark Container - Kept as is */}
+          {/* Watermark Container */}
           <div className="absolute inset-0 pointer-events-none overflow-hidden">
             <div className="absolute top-0 left-0 w-full h-full">
               <div className="grid grid-cols-3 gap-8 p-8">
@@ -755,7 +805,7 @@ export default function AttemptPage() {
                 <div className="flex justify-between gap-3 mt-6">
                   <button
                     onClick={prevQuestion}
-                    disabled={currentQuestionIndex === 0 || savingAnswer}
+                    disabled={currentQuestionIndex === 0}
                     className="px-6 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                   >
                     <ChevronLeft size={18} />
@@ -773,17 +823,15 @@ export default function AttemptPage() {
                     </button>
                   ) : isLastQuestion && !isLastSection ? (
                     <button
-                      onClick={() => fetchAttempt()}
-                      disabled={true}
-                      className="px-6 py-2 bg-blue-600/50 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2"
+                      onClick={() => fetchAttempt(true, true)}
+                      className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2"
                     >
-                      Section End
+                      Next Section
                       <ChevronRight size={18} />
                     </button>
                   ) : (
                     <button
                       onClick={nextQuestion}
-                      disabled={savingAnswer}
                       className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2"
                     >
                       Save & Next

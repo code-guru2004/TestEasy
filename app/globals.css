@@ -1,3 +1,6 @@
+@import '../styles/_variables.scss';
+@import '../styles/_keyframe-animations.scss';
+
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -140,3 +143,59 @@
 .delay-1000 {
   animation-delay: 1s;
 }
+
+/* Tiptap Editor Styles */
+.rich-text-editor .ProseMirror {
+  @apply focus:outline-none;
+}
+
+.rich-text-editor .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  @apply text-gray-400 float-left pointer-events-none h-0;
+}
+
+.rich-text-editor .ProseMirror ul,
+.rich-text-editor .ProseMirror ol {
+  @apply pl-6 my-4;
+}
+
+.rich-text-editor .ProseMirror ul {
+  @apply list-disc;
+}
+
+.rich-text-editor .ProseMirror ol {
+  @apply list-decimal;
+}
+
+.rich-text-editor .ProseMirror h1 {
+  @apply text-3xl font-bold my-4;
+}
+
+.rich-text-editor .ProseMirror h2 {
+  @apply text-2xl font-bold my-3;
+}
+
+.rich-text-editor .ProseMirror h3 {
+  @apply text-xl font-bold my-2;
+}
+
+.rich-text-editor .ProseMirror blockquote {
+  @apply border-l-4 border-gray-300 pl-4 my-4 italic text-gray-600;
+}
+
+.rich-text-editor .ProseMirror code {
+  @apply bg-gray-100 rounded px-1 py-0.5 font-mono text-sm;
+}
+
+.rich-text-editor .ProseMirror pre {
+  @apply bg-gray-800 text-gray-100 rounded-lg p-4 my-4 overflow-x-auto;
+}
+
+.rich-text-editor .ProseMirror pre code {
+  @apply bg-transparent text-inherit p-0;
+}
+
+.rich-text-editor .ProseMirror hr {
+  @apply my-4 border-gray-300;
+}
+

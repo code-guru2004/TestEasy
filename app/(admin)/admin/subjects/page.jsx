@@ -16,7 +16,8 @@ import {
   Layers,
   Sparkles,
   Calendar,
-  User
+  User,
+  ArrowRight
 } from "lucide-react";
 
 export default function SubjectsListPage() {
@@ -53,6 +54,10 @@ export default function SubjectsListPage() {
     }
   };
 
+  const handleSubjectClick = (subjectId) => {
+    router.push(`/admin/topics/${subjectId}`);
+  };
+
   const filteredSubjects = subjects.filter(subject =>
     subject.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -73,7 +78,7 @@ export default function SubjectsListPage() {
                 </h1>
               </div>
               <p className="text-gray-600 dark:text-gray-400 ml-14">
-                Manage your subject categories
+                Click on any subject to view its topics
               </p>
             </div>
             <button
@@ -142,7 +147,8 @@ export default function SubjectsListPage() {
             {filteredSubjects.map((subject) => (
               <div
                 key={subject._id}
-                className="group bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden hover:shadow-xl transition-all hover:scale-105"
+                onClick={() => handleSubjectClick(subject._id)}
+                className="group bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden hover:shadow-xl transition-all hover:scale-105 cursor-pointer"
               >
                 <div className="bg-gradient-to-r from-indigo-500 to-purple-500 p-4">
                   <div className="flex items-center justify-between">
@@ -151,13 +157,17 @@ export default function SubjectsListPage() {
                     </div>
                     <div className="flex space-x-2">
                       <button
-                        onClick={() => router.push(`/admin/subjects/${subject._id}/edit`)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          router.push(`/admin/subjects/${subject._id}/edit`);
+                        }}
                         className="p-2 rounded-lg bg-white/20 hover:bg-white/30 transition text-white"
                       >
                         <Edit size={16} />
                       </button>
                       <button
-                        onClick={() => {
+                        onClick={(e) => {
+                          e.stopPropagation();
                           if (confirm("Are you sure you want to delete this subject?")) {
                             // Delete logic here
                           }
@@ -171,9 +181,12 @@ export default function SubjectsListPage() {
                 </div>
                 
                 <div className="p-5">
-                  <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
-                    {subject.name}
-                  </h3>
+                  <div className="flex items-start justify-between mb-2">
+                    <h3 className="text-xl font-bold text-gray-900 dark:text-white group-hover:text-purple-600 transition-colors">
+                      {subject.name}
+                    </h3>
+                    <ArrowRight className="text-gray-400 group-hover:text-purple-600 group-hover:translate-x-1 transition-all" size={18} />
+                  </div>
                   {subject.description && (
                     <p className="text-gray-600 dark:text-gray-400 text-sm mb-4 line-clamp-2">
                       {subject.description}
@@ -190,6 +203,19 @@ export default function SubjectsListPage() {
                         : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
                     }`}>
                       {subject.isActive ? "Active" : "Inactive"}
+                    </div>
+                  </div>
+                  
+                  {/* View Topics Hint */}
+                  <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                        <Layers size={12} />
+                        Click to view topics
+                      </span>
+                      <span className="text-purple-600 dark:text-purple-400 group-hover:translate-x-1 transition-transform">
+                        →
+                      </span>
                     </div>
                   </div>
                 </div>

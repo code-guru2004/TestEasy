@@ -499,7 +499,7 @@ export default function TopicsListPage() {
                   <button
                     onClick={() => {
                       setShowNotesDialog(false);
-                      router.push(`/topics/${selectedTopic._id}/notes/create`);
+                      router.push(`/admin/topic/${selectedTopic._id}/notes/create`);
                     }}
                     className="inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
                   >
@@ -569,7 +569,7 @@ export default function TopicsListPage() {
                           <button
                             onClick={() => {
                               setShowNotesDialog(false);
-                              router.push(`/topics/${selectedTopic._id}/notes/${note._id}/edit`);
+                              router.push(`/admin/topic/${selectedTopic._id}/notes/${note._id}/edit`);
                             }}
                             className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                           >
@@ -599,7 +599,7 @@ export default function TopicsListPage() {
               <button
                 onClick={() => {
                   setShowNotesDialog(false);
-                  router.push(`/topics/${selectedTopic._id}/notes/create`);
+                  router.push(`/admin/topic/${selectedTopic._id}/notes/create`);
                 }}
                 className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium transition-colors flex items-center gap-2"
               >

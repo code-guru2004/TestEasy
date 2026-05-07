@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import axios from "axios";
-import { SimpleEditor } from "@/components/tiptap-templates/simple/simple-editor";
 
 const EditTopicPage = () => {
   const router = useRouter();
@@ -15,20 +14,21 @@ const EditTopicPage = () => {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
 
-  // Editor content state
-  const [editorContent, setEditorContent] = useState("");
+  // Notes management state
+  const [notes, setNotes] = useState([]);
+  const [loadingNotes, setLoadingNotes] = useState(false);
+  const [showNotesDialog, setShowNotesDialog] = useState(false);
+  const [deletingNoteId, setDeletingNoteId] = useState(null);
 
-  // Form fields
+  // Form fields (only topic fields, no content or resources since they moved to notes)
   const [formData, setFormData] = useState({
     name: "",
     subjectId: "",
     isActive: true,
     imageUrl: "",
     summary: "",
-    importantNotes: "",
     readTime: "",
     order: "",
-    resources: [],
   });
 
   const [subjectName, setSubjectName] = useState("");
@@ -61,14 +61,11 @@ const EditTopicPage = () => {
             isActive: topic.isActive ?? true,
             imageUrl: topic.imageUrl || "",
             summary: topic.summary || "",
-            importantNotes: topic.importantNotes || "",
             readTime: topic.readTime || "",
             order: topic.order || "",
-            resources: topic.resources || [],
           });
 
           setSubjectName(topic.subject?.name || "");
-          setEditorContent(topic.content || "");
         }
       } catch (err) {
         setError(err.response?.data?.message || "Failed to load topic");
@@ -80,35 +77,37 @@ const EditTopicPage = () => {
     if (topicId) fetchTopic();
   }, [topicId, router]);
 
+  // Fetch notes for this topic
+  const fetchNotes = async () => {
+    setLoadingNotes(true);
+    try {
+      const token = localStorage.getItem("token");
+      const response = await axios.get(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/notes?topicId=${topicId}&limit=100`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (response.data.success) {
+        setNotes(response.data.data);
+      }
+    } catch (err) {
+      console.error("Failed to load notes:", err);
+      setError("Failed to load notes");
+    } finally {
+      setLoadingNotes(false);
+    }
+  };
+
   // Handle input changes
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
     setFormData((prev) => ({
       ...prev,
       [name]: type === "checkbox" ? checked : value,
-    }));
-  };
-
-  // Handle resource management
-  const addResource = () => {
-    setFormData((prev) => ({
-      ...prev,
-      resources: [...prev.resources, { title: "", url: "", type: "link" }],
-    }));
-  };
-
-  const updateResource = (index, field, value) => {
-    setFormData((prev) => {
-      const updatedResources = [...prev.resources];
-      updatedResources[index] = { ...updatedResources[index], [field]: value };
-      return { ...prev, resources: updatedResources };
-    });
-  };
-
-  const removeResource = (index) => {
-    setFormData((prev) => ({
-      ...prev,
-      resources: prev.resources.filter((_, i) => i !== index),
     }));
   };
 
@@ -128,16 +127,11 @@ const EditTopicPage = () => {
 
       const updateData = {
         name: formData.name,
-        content: editorContent,
         summary: formData.summary,
-        importantNotes: formData.importantNotes,
         readTime: formData.readTime ? parseInt(formData.readTime) : null,
         order: formData.order ? parseInt(formData.order) : 0,
         isActive: formData.isActive,
         imageUrl: formData.imageUrl || null,
-        resources: formData.resources.filter(
-          (r) => r.title.trim() !== "" || r.url.trim() !== ""
-        ),
       };
 
       const response = await axios.put(
@@ -153,13 +147,73 @@ const EditTopicPage = () => {
 
       if (response.data.success) {
         setSuccess("Topic updated successfully!");
-        // setTimeout(() => router.push(`/topic/${topicId}`), 1500);
+        // Scroll to top to show success message
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        // Refresh topic data
+        const refreshedResponse = await axios.get(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/topics/${topicId}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+        if (refreshedResponse.data.success) {
+          const topic = refreshedResponse.data.data;
+          setFormData({
+            name: topic.name || "",
+            subjectId: topic.subject?._id || "",
+            isActive: topic.isActive ?? true,
+            imageUrl: topic.imageUrl || "",
+            summary: topic.summary || "",
+            readTime: topic.readTime || "",
+            order: topic.order || "",
+          });
+        }
       }
     } catch (err) {
       setError(err.response?.data?.message || "Update failed");
     } finally {
       setSaving(false);
     }
+  };
+
+  // Handle delete note
+  const handleDeleteNote = async (noteId, noteTitle) => {
+    if (!confirm(`Are you sure you want to delete "${noteTitle}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    setDeletingNoteId(noteId);
+    try {
+      const token = localStorage.getItem("token");
+      const response = await axios.delete(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/notes/${noteId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (response.data.success) {
+        // Remove note from list
+        setNotes(notes.filter(note => note._id !== noteId));
+        setSuccess("Note deleted successfully!");
+        setTimeout(() => setSuccess(null), 3000);
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to delete note");
+      setTimeout(() => setError(null), 3000);
+    } finally {
+      setDeletingNoteId(null);
+    }
+  };
+
+  // Open notes dialog
+  const openNotesDialog = async () => {
+    setShowNotesDialog(true);
+    await fetchNotes();
   };
 
   if (loading) {
@@ -175,21 +229,41 @@ const EditTopicPage = () => {
 
   return (
     <div className="min-h-screen bg-gray-50" style={{ backgroundColor: '#f9fafb' }}>
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="mb-8">
           <button
             onClick={() => router.back()}
-            className="text-blue-600 hover:text-blue-800 mb-4 flex items-center gap-2"
+            className="text-blue-600 hover:text-blue-800 mb-4 flex items-center gap-2 transition-colors"
           >
             ← Back to Topic
           </button>
-          <h1 className="text-3xl font-bold text-gray-900">Edit Topic</h1>
-          {subjectName && (
-            <p className="text-gray-600 mt-1">
-              Subject: <span className="font-medium">{subjectName}</span>
-            </p>
-          )}
+          <div className="flex justify-between items-start">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">Edit Topic</h1>
+              {subjectName && (
+                <p className="text-gray-600 mt-1">
+                  Subject: <span className="font-medium">{subjectName}</span>
+                </p>
+              )}
+              <p className="text-sm text-gray-500 mt-2">
+                Note: Topic content and resources are now managed through Notes. 
+                Each topic can have multiple notes.
+              </p>
+            </div>
+            
+            {/* Create Note Button */}
+            <button
+              type="button"
+              onClick={() => router.push(`/admin/topic/${topicId}/notes/create`)}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium transition-colors flex items-center gap-2"
+            >
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Create New Note
+            </button>
+          </div>
         </div>
 
         {/* Messages */}
@@ -206,8 +280,8 @@ const EditTopicPage = () => {
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Basic Info Card */}
-          <div className="bg-white rounded-lg shadow-sm p-6">
+          {/* Basic Information Card */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">
               Basic Information
             </h2>
@@ -266,11 +340,14 @@ const EditTopicPage = () => {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
                     placeholder="0"
                   />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Controls the display order of topics
+                  </p>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Reading Time (minutes)
+                    Estimated Reading Time (minutes)
                   </label>
                   <input
                     type="number"
@@ -280,6 +357,9 @@ const EditTopicPage = () => {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
                     placeholder="5"
                   />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Average time to complete all notes in this topic
+                  </p>
                 </div>
               </div>
 
@@ -299,7 +379,7 @@ const EditTopicPage = () => {
           </div>
 
           {/* Summary Card */}
-          <div className="bg-white rounded-lg shadow-sm p-6">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">
               Summary / Short Description
             </h2>
@@ -307,7 +387,7 @@ const EditTopicPage = () => {
               name="summary"
               value={formData.summary}
               onChange={handleInputChange}
-              rows={3}
+              rows={4}
               maxLength={500}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
               placeholder="Write a brief summary of this topic (max 500 characters)..."
@@ -317,182 +397,47 @@ const EditTopicPage = () => {
             </p>
           </div>
 
-          {/* Rich Content Editor Card */}
-          <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-            <div className="p-6 pb-0">
-              <h2 className="text-lg font-semibold text-gray-900 mb-1">
-                Topic Content
-              </h2>
-              <p className="text-sm text-gray-500 mb-4">
-                Use the editor below to create rich content with formatting, images, and links
-              </p>
-            </div>
-            {/* Wrap SimpleEditor in a div with light theme forced */}
-            <div className="simple-editor-light-wrapper" style={{ position: 'relative', width: '100%' }}>
-              <style jsx global>{`
-                /* Force light mode styles for the editor area */
-                .simple-editor-light-wrapper {
-                  --tt-bg-color: #ffffff;
-                  --tt-gray-light-900: #111827;
-                  --tt-theme-text: #111827;
-                  --tt-scrollbar-color: #cbd5e1;
-                }
-                
-                .simple-editor-light-wrapper .ProseMirror {
-                  color: #111827 !important;
-                  background-color: #ffffff !important;
-                }
-                
-                .simple-editor-light-wrapper .tiptap.ProseMirror {
-                  min-height: 400px;
-                  max-width: none !important;
-                  width: 100% !important;
-                }
-                
-                /* Override SimpleEditor's default full-width styles */
-                .simple-editor-light-wrapper .simple-editor-wrapper {
-                  width: 100% !important;
-                  height: auto !important;
-                  overflow: visible !important;
-                }
-                
-                .simple-editor-light-wrapper .simple-editor-content {
-                  max-width: none !important;
-                  width: 100% !important;
-                  margin: 0 !important;
-                }
-                
-                .simple-editor-light-wrapper .simple-editor-content .tiptap.ProseMirror.simple-editor {
-                  padding: 1rem !important;
-                }
-                
-                /* Toolbar styling */
-                .simple-editor-light-wrapper [data-toolbar] {
-                  background-color: #f9fafb !important;
-                  border-bottom: 1px solid #e5e7eb !important;
-                }
-                
-                /* Button styling */
-                .simple-editor-light-wrapper button {
-                  color: #374151 !important;
-                }
-                
-                .simple-editor-light-wrapper button:hover {
-                  background-color: #e5e7eb !important;
-                }
-              `}</style>
-
-              <SimpleEditor
-                content={editorContent}
-                onUpdate={({ editor }) => {
-                  setEditorContent(editor.getHTML());
-                }}
-              />
-            </div>
-          </div>
-
-          {/* Important Notes Card */}
-          <div className="bg-white rounded-lg shadow-sm p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">
-              Important Notes & Key Points
-            </h2>
-            <textarea
-              name="importantNotes"
-              value={formData.importantNotes}
-              onChange={handleInputChange}
-              rows={5}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
-              placeholder="Add important notes, key takeaways, exam pointers, or additional information here..."
-            />
-          </div>
-
-          {/* Resources Card */}
-          <div className="bg-white rounded-lg shadow-sm p-6">
+          {/* Notes Management Card */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-lg font-semibold text-gray-900">
-                Additional Resources
+                Notes Management
               </h2>
               <button
                 type="button"
-                onClick={addResource}
-                className="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium transition-colors"
+                onClick={openNotesDialog}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors flex items-center gap-2"
               >
-                + Add Resource
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                </svg>
+                View All Notes
               </button>
             </div>
+            <p className="text-sm text-gray-500">
+              Click the button above to view, edit, or delete all notes associated with this topic.
+            </p>
+          </div>
 
-            {formData.resources.length === 0 && (
-              <div className="text-center py-8 bg-gray-50 rounded-lg">
-                <p className="text-gray-500">
-                  No resources added yet. Click "Add Resource" to add links, videos, or documents.
-                </p>
+          {/* Info Card about Notes */}
+          <div className="bg-blue-50 rounded-lg shadow-sm border border-blue-200 p-6">
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0">
+                <svg className="h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
               </div>
-            )}
-
-            {formData.resources.map((resource, index) => (
-              <div
-                key={index}
-                className="border border-gray-200 rounded-lg p-4 mb-3 relative bg-gray-50"
-              >
-                <button
-                  type="button"
-                  onClick={() => removeResource(index)}
-                  className="absolute top-2 right-2 text-red-500 hover:text-red-700 p-1"
-                >
-                  ✕
-                </button>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">
-                      Title
-                    </label>
-                    <input
-                      type="text"
-                      value={resource.title}
-                      onChange={(e) =>
-                        updateResource(index, "title", e.target.value)
-                      }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
-                      placeholder="e.g., YouTube Tutorial"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">
-                      URL
-                    </label>
-                    <input
-                      type="url"
-                      value={resource.url}
-                      onChange={(e) =>
-                        updateResource(index, "url", e.target.value)
-                      }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
-                      placeholder="https://..."
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">
-                      Resource Type
-                    </label>
-                    <select
-                      value={resource.type}
-                      onChange={(e) =>
-                        updateResource(index, "type", e.target.value)
-                      }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
-                    >
-                      <option value="link">Link</option>
-                      <option value="video">Video</option>
-                      <option value="document">Document</option>
-                      <option value="pdf">PDF</option>
-                    </select>
-                  </div>
+              <div>
+                <h3 className="text-sm font-medium text-blue-900">About Topic Content</h3>
+                <div className="mt-1 text-sm text-blue-700">
+                  <p>
+                    The main content, important notes, and resources have been moved to separate <strong>Notes</strong>.
+                    Each topic can have multiple notes. Use the "Create New Note" button to add content.
+                  </p>
                 </div>
               </div>
-            ))}
+            </div>
           </div>
 
           {/* Form Actions */}
@@ -520,6 +465,144 @@ const EditTopicPage = () => {
             </button>
           </div>
         </form>
+
+        {/* Notes Dialog Modal */}
+        {showNotesDialog && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] flex flex-col">
+              {/* Dialog Header */}
+              <div className="flex justify-between items-center p-6 border-b border-gray-200">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">All Notes</h2>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Topic: {formData.name}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowNotesDialog(false)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Dialog Body */}
+              <div className="flex-1 overflow-y-auto p-6">
+                {loadingNotes ? (
+                  <div className="flex justify-center items-center py-12">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                  </div>
+                ) : notes.length === 0 ? (
+                  <div className="text-center py-12">
+                    <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <h3 className="mt-2 text-sm font-medium text-gray-900">No notes</h3>
+                    <p className="mt-1 text-sm text-gray-500">
+                      Get started by creating a new note for this topic.
+                    </p>
+                    <div className="mt-6">
+                      <button
+                        onClick={() => {
+                          setShowNotesDialog(false);
+                          router.push(`/admin/topic/${topicId}/notes/create`);
+                        }}
+                        className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+                      >
+                        <svg className="-ml-1 mr-2 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        </svg>
+                        Create New Note
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {notes.map((note) => (
+                      <div
+                        key={note._id}
+                        className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+                      >
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-2">
+                              <h3 className="text-lg font-semibold text-gray-900">
+                                {note.title}
+                              </h3>
+                              <span className={`text-xs px-2 py-1 rounded-full ${
+                                note.isPublished 
+                                  ? 'bg-green-100 text-green-700' 
+                                  : 'bg-yellow-100 text-yellow-700'
+                              }`}>
+                                {note.isPublished ? 'Published' : 'Draft'}
+                              </span>
+                              <span className="text-xs text-gray-500">
+                                v{note.version}
+                              </span>
+                            </div>
+                            <p className="text-sm text-gray-600 line-clamp-2">
+                              {note.content?.replace(/<[^>]*>/g, '').substring(0, 150) || 'No content'}
+                            </p>
+                            <div className="mt-2 flex items-center gap-4 text-xs text-gray-500">
+                              <span>Created: {new Date(note.createdAt).toLocaleDateString()}</span>
+                              <span>Updated: {new Date(note.updatedAt).toLocaleDateString()}</span>
+                            </div>
+                          </div>
+                          <div className="flex gap-2 ml-4">
+                            <button
+                              onClick={() => {
+                                setShowNotesDialog(false);
+                                router.push(`/admin/topic/${topicId}/notes/${note._id}/edit`);
+                              }}
+                              className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleDeleteNote(note._id, note.title)}
+                              disabled={deletingNoteId === note._id}
+                              className="px-3 py-1.5 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {deletingNoteId === note._id ? (
+                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                              ) : (
+                                'Delete'
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Dialog Footer */}
+              <div className="flex justify-end gap-3 p-6 border-t border-gray-200">
+                <button
+                  onClick={() => setShowNotesDialog(false)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-medium transition-colors"
+                >
+                  Close
+                </button>
+                <button
+                  onClick={() => {
+                    setShowNotesDialog(false);
+                    router.push(`/admin/topic/${topicId}/notes/create`);
+                  }}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium transition-colors flex items-center gap-2"
+                >
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Create New Note
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

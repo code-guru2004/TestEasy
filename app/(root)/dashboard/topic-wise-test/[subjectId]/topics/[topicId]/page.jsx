@@ -17,6 +17,8 @@ import {
   LayoutGrid,
   List,
   Bookmark,
+  Eye,
+  FileText as NoteIcon,
 } from "lucide-react";
 
 import {
@@ -41,15 +43,21 @@ export default function TopicWiseTestsPage() {
   const [attempts, setAttempts] = useState([]);
   const [selectedTest, setSelectedTest] = useState(null);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [viewMode, setViewMode] = useState("column"); // "grid" or "column"
+  const [viewMode, setViewMode] = useState("grid"); // "grid" or "column"
+  
+  // Notes dialog state
+  const [notesDialogOpen, setNotesDialogOpen] = useState(false);
+  const [notes, setNotes] = useState([]);
+  const [loadingNotes, setLoadingNotes] = useState(false);
+  const [topicDetails, setTopicDetails] = useState(null);
 
   useEffect(() => {
     fetchTests();
+    fetchNotes();
   }, [subjectId, topicId]);
 
   const fetchTests = async () => {
     try {
-    
       setLoading(true);
       const res = await axios.get(
         `${process.env.NEXT_PUBLIC_API_URL}/api/tests/subject/${subjectId}/topic/${topicId}`,
@@ -61,6 +69,42 @@ export default function TopicWiseTestsPage() {
       setError("Failed to load tests");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchNotes = async () => {
+    setLoadingNotes(true);
+    try {
+      const response = await axios.get(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/notes?topicId=${topicId}&isPublished=true&limit=100`,
+        {
+          headers: { Authorization: `Bearer ${token}` }
+        }
+      );
+      
+      if (response.data.success) {
+        setNotes(response.data.data);
+      }
+    } catch (error) {
+      console.error("Error fetching notes:", error);
+    } finally {
+      setLoadingNotes(false);
+    }
+  };
+
+  const fetchTopicDetails = async () => {
+    try {
+      const response = await axios.get(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/topics/${topicId}`,
+        {
+          headers: { Authorization: `Bearer ${token}` }
+        }
+      );
+      if (response.data.success) {
+        setTopicDetails(response.data.data);
+      }
+    } catch (error) {
+      console.error("Error fetching topic details:", error);
     }
   };
 
@@ -76,19 +120,27 @@ export default function TopicWiseTestsPage() {
     }
   };
 
-  // Add bookmark
-const addBookmark = async (testId) => {
-  try {
-    await axios.post(
-      `${process.env.NEXT_PUBLIC_API_URL}/api/bookmarks/${testId}`,
-      {},
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    // Update UI
-  } catch (error) {
-    console.error(error);
-  }
-};
+  const addBookmark = async (testId) => {
+    try {
+      await axios.post(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/bookmarks/${testId}`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      // Update UI - could show a toast notification
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const openNotesDialog = async () => {
+    await fetchTopicDetails();
+    setNotesDialogOpen(true);
+  };
+
+  const handleViewNote = (noteId) => {
+    router.push(`/topics/${topicId}/notes/${noteId}`);
+  };
 
   const formatDate = (d) =>
     new Date(d).toLocaleString("en-US", {
@@ -180,7 +232,7 @@ const addBookmark = async (testId) => {
                 className="text-gray-400 hover:text-gray-600 transition-colors"
                 title="Bookmark Test"
               >
-                <Bookmark className="text-blue-600 bg-blue-200/50 p-0.5 rounded-xs hover:bg-blue-300/50 outline-1 " size={20}/>
+                <Bookmark className="text-blue-600 bg-blue-200/50 p-0.5 rounded-xs hover:bg-blue-300/50 outline-1" size={20}/>
               </button>
               <span
                 className={`text-xs px-2 py-0.5 rounded-full border ml-2 flex-shrink-0 ${status.color}`}
@@ -267,13 +319,12 @@ const addBookmark = async (testId) => {
               </p>
             </div>
             <div>
-              {/* bookmark button */}
               <button 
                 onClick={() => addBookmark(test._id)}
                 className="text-gray-400 hover:text-gray-600 transition-colors"
                 title="Bookmark Test"
               >
-                <Bookmark className="text-blue-600 bg-blue-200 p-0.5 rounded-xs hover:bg-blue-300 outline-1 "/>
+                <Bookmark className="text-blue-600 bg-blue-200 p-0.5 rounded-xs hover:bg-blue-300 outline-1"/>
               </button>
             </div>
             <span
@@ -379,10 +430,23 @@ const addBookmark = async (testId) => {
           </button>
 
           <div className="border-b border-gray-200 pb-4">
-            <h1 className="text-2xl font-bold text-gray-900 mb-1">
-              {topicName}
-            </h1>
-            <p className="text-gray-600 text-sm">{subjectName}</p>
+            <div className="flex justify-between items-start flex-wrap gap-4">
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900 mb-1">
+                  {topicName}
+                </h1>
+                <p className="text-gray-600 text-sm">{subjectName}</p>
+              </div>
+              
+              {/* View Notes Button */}
+              <button
+                onClick={openNotesDialog}
+                className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+              >
+                <NoteIcon size={18} />
+                <span>View Notes ({notes.length})</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -505,6 +569,105 @@ const addBookmark = async (testId) => {
               ))
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Notes Dialog */}
+      <Dialog open={notesDialogOpen} onOpenChange={setNotesDialogOpen}>
+        <DialogContent className="sm:max-w-3xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-semibold flex items-center gap-2">
+              <NoteIcon size={22} />
+              Study Notes
+            </DialogTitle>
+            {topicDetails && (
+              <p className="text-sm text-gray-500 mt-1">
+                {topicDetails.name} • {notes.length} note{notes.length !== 1 ? 's' : ''} available
+              </p>
+            )}
+          </DialogHeader>
+
+          <div className="space-y-4 mt-4">
+            {loadingNotes ? (
+              <div className="flex justify-center items-center py-12">
+                <Loader2 className="animate-spin w-8 h-8 text-purple-600" />
+              </div>
+            ) : notes.length === 0 ? (
+              <div className="text-center py-12">
+                <BookOpen className="w-16 h-16 text-gray-300 mx-auto mb-3" />
+                <h3 className="text-lg font-medium text-gray-900 mb-1">No notes available</h3>
+                <p className="text-sm text-gray-500">
+                  Study notes haven't been added for this topic yet.
+                </p>
+              </div>
+            ) : (
+              notes.map((note) => (
+                <div
+                  key={note._id}
+                  className="border border-gray-200 rounded-lg p-5 hover:shadow-md transition-all hover:border-purple-200"
+                >
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2 flex-wrap">
+                        <h3 className="text-lg font-semibold text-gray-900">
+                          {note.title}
+                        </h3>
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">
+                          v{note.version}
+                        </span>
+                      </div>
+                      
+                      {/* Content Preview */}
+                      {/* <div 
+                        className="text-sm text-gray-600 mb-3 line-clamp-3"
+                        dangerouslySetInnerHTML={{ 
+                          __html: note.content?.substring(0, 300) + (note.content?.length > 300 ? '...' : '') || 'No content available'
+                        }}
+                      /> */}
+                      
+                      {/* Metadata */}
+                      <div className="flex items-center gap-4 text-xs text-gray-400">
+                        <span className="flex items-center gap-1">
+                          <Clock size={12} />
+                          Updated: {new Date(note.updatedAt).toLocaleDateString()}
+                        </span>
+                        {note.importantNotes && (
+                          <span className="flex items-center gap-1">
+                            <BookOpen size={12} />
+                            Has important notes
+                          </span>
+                        )}
+                        {note.resources && note.resources.length > 0 && (
+                          <span className="flex items-center gap-1">
+                            <FileText size={12} />
+                            {note.resources.length} resource(s)
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {/* View Button */}
+                    <button
+                      onClick={() => handleViewNote(note._id)}
+                      className="ml-4 flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                    >
+                      <Eye size={16} />
+                      View
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Footer with note count */}
+          {notes.length > 0 && (
+            <div className="mt-6 pt-4 border-t border-gray-200">
+              <p className="text-center text-sm text-gray-500">
+                Showing {notes.length} note{notes.length !== 1 ? 's' : ''} for this topic
+              </p>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

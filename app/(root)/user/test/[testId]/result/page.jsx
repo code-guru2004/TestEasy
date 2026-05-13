@@ -117,7 +117,7 @@ export default function TestResultPage() {
         }
       );
       const data = await res.json();
-      console.log("Fetched result data:", data);
+      //console.log("Fetched result data:", data);
       
       if (data) {
         // Extract device info from response

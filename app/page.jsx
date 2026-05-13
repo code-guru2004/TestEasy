@@ -37,14 +37,23 @@ import Link from "next/link";
 
 export default function HomePage() {
   const router = useRouter();
-  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(false);
   const [hoveredExam, setHoveredExam] = useState(null);
   const [hoveredFeature, setHoveredFeature] = useState(null);
+  function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    
+    if (parts.length === 2) {
+      return parts.pop().split(";").shift();
+    }
+  }
+  
 
   // Check for existing token
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    console.log("Checking auth token:", token);
+    const token = localStorage.getItem("token") || getCookie("token");
+    
     if (token) {
       router.push("/dashboard");
     } else {

@@ -315,7 +315,7 @@ export default function CategoriesPage() {
 
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 relative z-10">
                 {/* Search and Filter Bar */}
-                <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-md rounded-2xl shadow-xl p-5 mb-8 sticky top-4 z-20 border border-gray-200/50 dark:border-gray-700/50 animate-fade-in-up">
+                <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-md rounded-2xl shadow-xl p-5 mb-8 sticky top-14 md:top-4 z-20 border border-gray-200/50 dark:border-gray-700/50 animate-fade-in-up">
                     <div className="flex flex-wrap gap-4 items-center justify-between">
                         <div className="flex-1 min-w-[200px]">
                             <div className="relative group">

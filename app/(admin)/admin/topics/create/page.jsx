@@ -17,7 +17,16 @@ import {
   Hash,
   BookOpen,
   Link as LinkIcon,
-  AlertTriangle
+  AlertTriangle,
+  TrendingUp,
+  Tag,
+  Clock,
+  Award,
+  Briefcase,
+  Plus,
+  Trash2,
+  Star,
+  AlertOctagon
 } from "lucide-react";
 
 export default function CreateTopicPage() {
@@ -26,25 +35,53 @@ export default function CreateTopicPage() {
   
   const [loading, setLoading] = useState(false);
   const [subjects, setSubjects] = useState([]);
+  const [topics, setTopics] = useState([]);
   const [formData, setFormData] = useState({
     name: "",
-    subjectId: ""
+    subjectId: "",
+    summary: "",
+    order: 0,
+    readTime: null,
+    importanceLevel: "High",
+    prerequisites: [],
+    examSpecific: [],
+    tags: [],
+    metadata: {
+      totalQuestions: 0,
+      averageTimePerQuestion: null,
+      successRate: null
+    }
   });
+  
   const [selectedSubject, setSelectedSubject] = useState(null);
+  const [newTag, setNewTag] = useState("");
   const [notification, setNotification] = useState({ show: false, type: "", message: "" });
+  
+  // Exam mapping state
+  const [selectedExams, setSelectedExams] = useState([]);
+  const availableExams = [
+    { value: 'SSC', label: 'SSC', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300' },
+    { value: 'RRB_NTPC', label: 'RRB NTPC', color: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' },
+    { value: 'UPSC', label: 'UPSC', color: 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300' },
+    { value: 'STATE_PSC', label: 'State PSC', color: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300' },
+    { value: 'BANKING', label: 'Banking', color: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' },
+    { value: 'OTHER', label: 'Other', color: 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300' }
+  ];
 
   // Fetch subjects on mount
   useEffect(() => {
     fetchSubjects();
   }, []);
 
-  // Update selected subject when subjectId changes
+  // Fetch topics when subject is selected (for prerequisites)
   useEffect(() => {
     if (formData.subjectId) {
+      fetchTopicsBySubject(formData.subjectId);
       const subject = subjects.find(s => s._id === formData.subjectId);
       setSelectedSubject(subject);
     } else {
       setSelectedSubject(null);
+      setTopics([]);
     }
   }, [formData.subjectId, subjects]);
 
@@ -57,9 +94,10 @@ export default function CreateTopicPage() {
 
   const fetchSubjects = async () => {
     try {
-      const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/subjects/search`, {
+      const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/subjects/all`, {
         headers: { Authorization: `Bearer ${token}` }
       });
+      console.log(response.data.data)
       setSubjects(response.data.data);
     } catch (error) {
       console.error("Error fetching subjects:", error);
@@ -67,9 +105,94 @@ export default function CreateTopicPage() {
     }
   };
 
+  const fetchTopicsBySubject = async (subjectId) => {
+    try {
+      const response = await axios.get(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/topics/subject/${subjectId}?includeInactive=false`,
+        {
+          headers: { Authorization: `Bearer ${token}` }
+        }
+      );
+      setTopics(response.data.data);
+    } catch (error) {
+      console.error("Error fetching topics:", error);
+    }
+  };
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleExamMappingChange = (examValue, field, value) => {
+    setFormData(prev => {
+      const existingIndex = prev.examSpecific.findIndex(e => e.exam === examValue);
+      let newExamSpecific = [...prev.examSpecific];
+      
+      if (existingIndex >= 0) {
+        newExamSpecific[existingIndex] = {
+          ...newExamSpecific[existingIndex],
+          [field]: value
+        };
+      } else {
+        newExamSpecific.push({
+          exam: examValue,
+          importance: field === 'importance' ? value : 'Medium',
+          weightage: field === 'weightage' ? value : 0,
+          previousYearCount: field === 'previousYearCount' ? value : 0
+        });
+      }
+      
+      return { ...prev, examSpecific: newExamSpecific };
+    });
+  };
+
+  const addExamToTopic = (examValue) => {
+    if (!selectedExams.includes(examValue)) {
+      setSelectedExams([...selectedExams, examValue]);
+      setFormData(prev => ({
+        ...prev,
+        examSpecific: [
+          ...prev.examSpecific,
+          { exam: examValue, importance: 'Medium', weightage: 0, previousYearCount: 0 }
+        ]
+      }));
+    }
+  };
+
+  const removeExamFromTopic = (examValue) => {
+    setSelectedExams(selectedExams.filter(e => e !== examValue));
+    setFormData(prev => ({
+      ...prev,
+      examSpecific: prev.examSpecific.filter(e => e.exam !== examValue)
+    }));
+  };
+
+  const addTag = () => {
+    if (newTag.trim() && !formData.tags.includes(newTag.trim())) {
+      setFormData(prev => ({
+        ...prev,
+        tags: [...prev.tags, newTag.trim()]
+      }));
+      setNewTag("");
+    }
+  };
+
+  const removeTag = (tagToRemove) => {
+    setFormData(prev => ({
+      ...prev,
+      tags: prev.tags.filter(tag => tag !== tagToRemove)
+    }));
+  };
+
+  const handlePrerequisiteChange = (topicId) => {
+    setFormData(prev => {
+      const isSelected = prev.prerequisites.includes(topicId);
+      const newPrerequisites = isSelected
+        ? prev.prerequisites.filter(id => id !== topicId)
+        : [...prev.prerequisites, topicId];
+      return { ...prev, prerequisites: newPrerequisites };
+    });
   };
 
   const validateForm = () => {
@@ -93,6 +216,11 @@ export default function CreateTopicPage() {
       return false;
     }
     
+    if (formData.summary && formData.summary.length > 500) {
+      showNotification("error", "Summary must be less than 500 characters");
+      return false;
+    }
+    
     return true;
   };
 
@@ -108,7 +236,15 @@ export default function CreateTopicPage() {
         `${process.env.NEXT_PUBLIC_API_URL}/api/topics/create`,
         {
           name: formData.name,
-          subjectId: formData.subjectId
+          subjectId: formData.subjectId,
+          summary: formData.summary || undefined,
+          order: formData.order,
+          readTime: formData.readTime || undefined,
+          importanceLevel: formData.importanceLevel,
+          prerequisites: formData.prerequisites,
+          examSpecific: formData.examSpecific.filter(e => e.weightage > 0 || e.importance !== 'Medium'),
+          tags: formData.tags,
+          metadata: formData.metadata
         },
         {
           headers: { Authorization: `Bearer ${token}` }
@@ -118,16 +254,30 @@ export default function CreateTopicPage() {
       showNotification("success", "Topic created successfully!");
       
       setTimeout(() => {
+        // Reset form
         setFormData({
           name: "",
-          subjectId: ""
+          subjectId: "",
+          summary: "",
+          order: 0,
+          readTime: null,
+          importanceLevel: "High",
+          prerequisites: [],
+          examSpecific: [],
+          tags: [],
+          metadata: {
+            totalQuestions: 0,
+            averageTimePerQuestion: null,
+            successRate: null
+          }
         });
-        setSelectedSubject(null);
+        setSelectedExams([]);
+        setNewTag("");
         setLoading(false);
         
         // Optional: Redirect after 2 seconds
         setTimeout(() => {
-          router.push("/admin/topics/create");
+          router.push("/admin/topics");
         }, 1500);
       }, 2000);
       
@@ -141,9 +291,19 @@ export default function CreateTopicPage() {
     }
   };
 
+  const getImportanceColor = (level) => {
+    switch(level) {
+      case 'Very High': return 'text-purple-600 bg-purple-100 dark:bg-purple-900/30';
+      case 'High': return 'text-red-600 bg-red-100 dark:bg-red-900/30';
+      case 'Medium': return 'text-yellow-600 bg-yellow-100 dark:bg-yellow-900/30';
+      case 'Low': return 'text-green-600 bg-green-100 dark:bg-green-900/30';
+      default: return 'text-gray-600 bg-gray-100 dark:bg-gray-900/30';
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 py-8">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="mb-8">
           <button
@@ -165,7 +325,7 @@ export default function CreateTopicPage() {
                 </h1>
               </div>
               <p className="text-gray-600 dark:text-gray-400 ml-14">
-                Add topics under subjects to organize questions effectively
+                Add topics under subjects with advanced configuration
               </p>
             </div>
             <div className="bg-gradient-to-r from-blue-500 to-cyan-500 px-4 py-2 rounded-lg shadow-sm">
@@ -273,7 +433,7 @@ export default function CreateTopicPage() {
                   value={formData.name}
                   onChange={handleInputChange}
                   className="w-full pl-10 pr-4 py-3 border-2 border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition"
-                  placeholder="e.g., Algebra, Calculus, Trigonometry"
+                  placeholder="e.g., Percentage, Averages, Profit & Loss"
                   autoFocus
                   disabled={!formData.subjectId}
                 />
@@ -283,6 +443,268 @@ export default function CreateTopicPage() {
               </p>
             </div>
 
+            {/* Summary */}
+            <div className="space-y-2">
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                Summary <span className="text-gray-400 text-xs font-normal">(Optional)</span>
+              </label>
+              <div className="relative">
+                <Info size={18} className="absolute left-3 top-3 text-gray-400" />
+                <textarea
+                  name="summary"
+                  value={formData.summary}
+                  onChange={handleInputChange}
+                  rows={3}
+                  className="w-full pl-10 pr-4 py-3 border-2 border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white resize-none"
+                  placeholder="Brief description of the topic and key concepts covered..."
+                />
+              </div>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                {formData.summary.length}/500 characters
+              </p>
+            </div>
+
+            {/* Display Order & Read Time */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                  Display Order
+                </label>
+                <div className="relative">
+                  <TrendingUp size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="number"
+                    name="order"
+                    value={formData.order}
+                    onChange={handleInputChange}
+                    className="w-full pl-10 pr-4 py-3 border-2 border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                    placeholder="0"
+                    min="0"
+                  />
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Lower numbers appear first</p>
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                  Read Time (minutes)
+                </label>
+                <div className="relative">
+                  <Clock size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="number"
+                    name="readTime"
+                    value={formData.readTime || ""}
+                    onChange={handleInputChange}
+                    className="w-full pl-10 pr-4 py-3 border-2 border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                    placeholder="Estimated reading time"
+                    min="1"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Importance Level */}
+            <div className="space-y-2">
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                Importance Level
+              </label>
+              <div className="relative">
+                <Award size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                <select
+                  name="importanceLevel"
+                  value={formData.importanceLevel}
+                  onChange={handleInputChange}
+                  className="w-full pl-10 pr-4 py-3 border-2 border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition"
+                >
+                  <option value="Very High">Very High</option>
+                  <option value="High">High</option>
+                  <option value="Medium">Medium</option>
+                  <option value="Low">Low</option>
+                </select>
+              </div>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Importance level for exam preparation prioritization
+              </p>
+            </div>
+
+            {/* Prerequisites */}
+            {topics.length > 0 && (
+              <div className="space-y-2">
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                  Prerequisites <span className="text-gray-400 text-xs font-normal">(Optional)</span>
+                </label>
+                <div className="p-4 border-2 border-gray-200 dark:border-gray-700 rounded-xl">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                    Select topics that should be completed before this one
+                  </p>
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {topics.filter(t => t._id !== formData._id).map((topic) => (
+                      <label key={topic._id} className="flex items-center space-x-3 p-2 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.prerequisites.includes(topic._id)}
+                          onChange={() => handlePrerequisiteChange(topic._id)}
+                          className="w-4 h-4 text-teal-600 rounded focus:ring-teal-500"
+                        />
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{topic.name}</p>
+                          {topic.summary && (
+                            <p className="text-xs text-gray-500 dark:text-gray-400">{topic.summary.substring(0, 100)}</p>
+                          )}
+                        </div>
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${getImportanceColor(topic.importanceLevel)}`}>
+                          {topic.importanceLevel}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Exam Mapping */}
+            <div className="space-y-2">
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                Exam Mapping
+              </label>
+              <div className="space-y-3">
+                {/* Add Exam Button */}
+                <div className="flex flex-wrap gap-2">
+                  {availableExams
+                    .filter(exam => !selectedExams.includes(exam.value))
+                    .map((exam) => (
+                      <button
+                        key={exam.value}
+                        type="button"
+                        onClick={() => addExamToTopic(exam.value)}
+                        className="px-3 py-1.5 text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition flex items-center space-x-1"
+                      >
+                        <Plus size={14} />
+                        <span>{exam.label}</span>
+                      </button>
+                    ))}
+                </div>
+
+                {/* Selected Exams with Configuration */}
+                {selectedExams.length > 0 && (
+                  <div className="space-y-3 mt-4">
+                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Configure Exam Details:</p>
+                    {selectedExams.map((examValue) => {
+                      const exam = availableExams.find(e => e.value === examValue);
+                      const examData = formData.examSpecific.find(e => e.exam === examValue);
+                      return (
+                        <div key={examValue} className="p-4 border-2 border-gray-200 dark:border-gray-700 rounded-xl">
+                          <div className="flex justify-between items-start mb-3">
+                            <span className={`px-2 py-1 rounded-lg text-xs font-medium ${exam.color}`}>
+                              {exam.label}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => removeExamFromTopic(examValue)}
+                              className="text-red-500 hover:text-red-700 transition"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div>
+                              <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
+                                Importance
+                              </label>
+                              <select
+                                value={examData?.importance || "Medium"}
+                                onChange={(e) => handleExamMappingChange(examValue, 'importance', e.target.value)}
+                                className="w-full px-3 py-2 border-2 border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                              >
+                                <option value="Low">Low</option>
+                                <option value="Medium">Medium</option>
+                                <option value="High">High</option>
+                                <option value="Critical">Critical</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
+                                Weightage (%)
+                              </label>
+                              <input
+                                type="number"
+                                value={examData?.weightage || 0}
+                                onChange={(e) => handleExamMappingChange(examValue, 'weightage', parseInt(e.target.value) || 0)}
+                                className="w-full px-3 py-2 border-2 border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                placeholder="e.g., 15"
+                                min="0"
+                                max="100"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
+                                Previous Year Count
+                              </label>
+                              <input
+                                type="number"
+                                value={examData?.previousYearCount || 0}
+                                onChange={(e) => handleExamMappingChange(examValue, 'previousYearCount', parseInt(e.target.value) || 0)}
+                                className="w-full px-3 py-2 border-2 border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                placeholder="Times appeared"
+                                min="0"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Tags */}
+            <div className="space-y-2">
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                Tags <span className="text-gray-400 text-xs font-normal">(Optional)</span>
+              </label>
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Tag size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    value={newTag}
+                    onChange={(e) => setNewTag(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
+                    className="w-full pl-10 pr-4 py-3 border-2 border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                    placeholder="Add tags (e.g., algebra, basic-math, shortcuts)"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={addTag}
+                  className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-xl font-medium hover:shadow-lg transition"
+                >
+                  <Plus size={18} />
+                </button>
+              </div>
+              {formData.tags.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {formData.tags.map((tag, index) => (
+                    <span
+                      key={index}
+                      className="inline-flex items-center space-x-1 px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-xs"
+                    >
+                      <span>#{tag}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeTag(tag)}
+                        className="hover:text-red-500 transition"
+                      >
+                        <X size={12} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {/* Preview Card */}
             {formData.name && selectedSubject && (
               <div className="mt-6 p-4 bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 rounded-xl border border-emerald-200 dark:border-emerald-800">
@@ -290,20 +712,54 @@ export default function CreateTopicPage() {
                   <Sparkles size={16} className="text-emerald-600" />
                   <h3 className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">Preview</h3>
                 </div>
-                <div className="flex items-center space-x-3">
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 flex items-center justify-center">
+                <div className="flex items-start space-x-3">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 flex items-center justify-center flex-shrink-0">
                     <FolderTree className="text-white" size={24} />
                   </div>
                   <div className="flex-1">
-                    <p className="font-semibold text-gray-900 dark:text-white text-lg">
-                      {formData.name}
-                    </p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="font-semibold text-gray-900 dark:text-white text-lg">
+                        {formData.name}
+                      </p>
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${getImportanceColor(formData.importanceLevel)}`}>
+                        {formData.importanceLevel}
+                      </span>
+                    </div>
                     <div className="flex items-center space-x-2 mt-1">
                       <BookOpen size={12} className="text-gray-400" />
                       <span className="text-xs text-gray-600 dark:text-gray-400">
                         {selectedSubject.name}
                       </span>
                     </div>
+                    {formData.summary && (
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
+                        {formData.summary}
+                      </p>
+                    )}
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {formData.tags.slice(0, 3).map((tag, i) => (
+                        <span key={i} className="text-xs text-gray-500 dark:text-gray-400">
+                          #{tag}
+                        </span>
+                      ))}
+                      {formData.tags.length > 3 && (
+                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                          +{formData.tags.length - 3} more
+                        </span>
+                      )}
+                    </div>
+                    {selectedExams.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {selectedExams.slice(0, 2).map((exam) => (
+                          <span key={exam} className="text-xs px-1.5 py-0.5 bg-gray-200 dark:bg-gray-700 rounded">
+                            {exam}
+                          </span>
+                        ))}
+                        {selectedExams.length > 2 && (
+                          <span className="text-xs text-gray-500">+{selectedExams.length - 2}</span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -353,53 +809,15 @@ export default function CreateTopicPage() {
               </h4>
               <ul className="text-xs text-teal-800 dark:text-teal-400 space-y-1">
                 <li>• Create specific, focused topics rather than broad categories</li>
-                <li>• Ensure topics clearly belong to their parent subject</li>
-                <li>• Use consistent naming conventions across topics</li>
-                <li>• Topics help students navigate and find relevant questions easily</li>
-                <li>• Each question must be associated with a topic under a subject</li>
+                <li>• Set appropriate importance level based on exam relevance</li>
+                <li>• Add tags to improve search and categorization</li>
+                <li>• Configure exam mapping to track topic importance across different exams</li>
+                <li>• Define prerequisites to create learning paths for students</li>
+                <li>• Add a clear summary to help students understand what they'll learn</li>
               </ul>
             </div>
           </div>
         </div>
-
-        {/* Quick Stats */}
-        {subjects.length > 0 && (
-          <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Total Subjects</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{subjects.length}</p>
-                </div>
-                <div className="w-10 h-10 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
-                  <BookOpen size={20} className="text-indigo-600 dark:text-indigo-400" />
-                </div>
-              </div>
-            </div>
-            <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Status</p>
-                  <p className="text-lg font-semibold text-green-600 dark:text-green-400 mt-1">Ready to Create</p>
-                </div>
-                <div className="w-10 h-10 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-                  <CheckCircle size={20} className="text-green-600 dark:text-green-400" />
-                </div>
-              </div>
-            </div>
-            <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Topics Created</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">—</p>
-                </div>
-                <div className="w-10 h-10 rounded-lg bg-teal-100 dark:bg-teal-900/30 flex items-center justify-center">
-                  <FolderTree size={20} className="text-teal-600 dark:text-teal-400" />
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
       <style jsx>{`

@@ -6,41 +6,52 @@ export function middleware(request) {
 
   // 🔓 Public routes (no auth needed)
   const publicRoutes = ["/login", "/register", "/"];
-
+  
+  // Check if current path is a public route
+  const isPublicRoute = publicRoutes.includes(pathname);
+  
   // 🔐 Protected routes
   const isDashboardRoute = pathname.startsWith("/dashboard");
   const isAdminRoute = pathname.startsWith("/admin");
-  const isAuthPage = publicRoutes.includes(pathname);
 
-  // 🚫 No token → block protected routes
-  if (!token && (isDashboardRoute || isAdminRoute)) {
-    return NextResponse.redirect(new URL("/login", request.url));
+  // If user is NOT authenticated
+  if (!token) {
+    // Allow access to public routes
+    if (isPublicRoute) {
+      return NextResponse.next();
+    }
+    
+    // Redirect protected routes to home page (or login)
+    return NextResponse.redirect(new URL("/", request.url));
   }
 
-  // ✅ If logged in → prevent going to login/register
-  if (token && isAuthPage) {
+  // User IS authenticated below this point
+  
+  // If authenticated user tries to access public routes, redirect to dashboard
+  if (isPublicRoute) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
   // 🔥 Decode token (no verify for speed)
-  if (token) {
-    try {
-      const decoded = JSON.parse(
-        Buffer.from(token.split(".")[1], "base64").toString()
-      );
+  try {
+    const decoded = JSON.parse(
+      Buffer.from(token.split(".")[1], "base64").toString()
+    );
 
-      // 🚫 Not admin → block admin routes
-      if (isAdminRoute && decoded.role !== "admin") {
-        return NextResponse.redirect(new URL("/dashboard", request.url));
-      }
-
-    } catch (err) {
-      // ❌ Invalid token → force logout
-      return NextResponse.redirect(new URL("/login", request.url));
+    // 🚫 Not admin → block admin routes
+    if (isAdminRoute && decoded.role !== "admin") {
+      return NextResponse.redirect(new URL("/dashboard", request.url));
     }
-  }
 
-  return NextResponse.next();
+    // Allow access to protected routes
+    return NextResponse.next();
+
+  } catch (err) {
+    // ❌ Invalid token → force logout and redirect to home
+    const response = NextResponse.redirect(new URL("/", request.url));
+    response.cookies.delete("token");
+    return response;
+  }
 }
 
 export const config = {

@@ -46,7 +46,7 @@ export default function DashboardLayout({ children }) {
     else if (currentPath === "/dashboard/subjects") setActiveTab("subjects");
     else if (currentPath === "/dashboard/tests") setActiveTab("tests");
     else if (currentPath === "/dashboard/topic-wise-test") setActiveTab("topic-wise-test");
-    else if (currentPath === "/dashboard/subject-wise-test") setActiveTab("subjects-wise-test");
+    else if (currentPath === "/dashboard/categories") setActiveTab("categories");
     else if (currentPath === "/dashboard/my-results") setActiveTab("results");
     else if (currentPath === "/dashboard/leaderboard") setActiveTab("leaderboard");
     else if (currentPath === "/dashboard/schedule") setActiveTab("schedule");
@@ -107,7 +107,7 @@ export default function DashboardLayout({ children }) {
     { id: "home", label: "Home", icon: Home, href: "/dashboard" },
     { id: "tests", label: "Full Length Tests", icon: MdOutlineReceiptLong, href: "/dashboard/tests" },
     { id: "topic-wise-test", label: "Topic-wise Tests", icon: FaSwatchbook, href: "/dashboard/topic-wise-test" },
-    { id: "subjects-wise-test", label: "Subject-wise Tests", icon: FaBook, href: "/dashboard/subject-wise-test" },
+    { id: "categories", label: "Categories", icon: FaBook, href: "/dashboard/categories" },
     {id: "Contests", label: "Contests", icon: GiBracers, href: "/dashboard/coming-soon"},
     { id: "results", label: "Results", icon: BarChart3, href: "/dashboard/my-results" },
     { id: "leaderboard", label: "Leaderboard", icon: Award, href: "/dashboard/leaderboard" },

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import { useSelector } from "react-redux";
 import axios from "axios";
 import {
@@ -19,17 +19,24 @@ import {
   Calendar,
   FolderTree,
   TrendingUp,
-  Award,
-  Briefcase
+  Edit3,
+  Trash2,
+  Loader
 } from "lucide-react";
 
-export default function CreateSubjectPage() {
+export default function EditSubjectPage() {
   const router = useRouter();
+  const params = useParams();
+  const { id } = params;
   const { token } = useSelector((state) => state.auth);
 
   const [loading, setLoading] = useState(false);
+  const [fetchingData, setFetchingData] = useState(true);
   const [categories, setCategories] = useState([]);
   const [loadingCategories, setLoadingCategories] = useState(true);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  
   const [formData, setFormData] = useState({
     name: "",
     description: "",
@@ -37,7 +44,8 @@ export default function CreateSubjectPage() {
     category: "",
     order: 0,
     difficultyLevel: "Beginner",
-    examMapping: []
+    examMapping: [],
+    isActive: true
   });
   
   const [image, setImage] = useState(null);
@@ -57,10 +65,13 @@ export default function CreateSubjectPage() {
     { value: 'OTHER', label: 'Other', color: 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300' }
   ];
 
-  // Fetch categories on component mount
+  // Fetch subject data and categories on component mount
   useEffect(() => {
-    fetchCategories();
-  }, []);
+    if (id) {
+      fetchSubjectData();
+      fetchCategories();
+    }
+  }, [id]);
 
   const fetchCategories = async () => {
     try {
@@ -77,6 +88,50 @@ export default function CreateSubjectPage() {
       showNotification("error", "Failed to load categories");
     } finally {
       setLoadingCategories(false);
+    }
+  };
+
+  const fetchSubjectData = async () => {
+    try {
+      setFetchingData(true);
+      const response = await axios.get(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/subjects/${id}`,
+        {
+          headers: { Authorization: `Bearer ${token}` }
+        }
+      );
+      
+      const subject = response.data.data;
+      console.log(subject)
+      setFormData({
+        name: subject.name || "",
+        description: subject.description || "",
+        imageUrl: subject.imageUrl || "",
+        category: subject.category?._id || subject.category || "",
+        order: subject.order || 0,
+        difficultyLevel: subject.difficultyLevel || "Beginner",
+        examMapping: subject.examMapping || [],
+        isActive: subject.isActive !== undefined ? subject.isActive : true
+      });
+      
+      setUploadedUrl(subject.imageUrl || "");
+      
+      // Set selected exams based on examMapping
+      if (subject.examMapping && subject.examMapping.length > 0) {
+        const exams = subject.examMapping.map(e => e.exam);
+        setSelectedExams(exams);
+      }
+      
+    } catch (error) {
+      console.error("Error fetching subject:", error);
+      showNotification("error", error.response?.data?.message || "Failed to load subject data");
+      
+      // Redirect if subject not found
+      setTimeout(() => {
+        router.push("/admin/subjects");
+      }, 2000);
+    } finally {
+      setFetchingData(false);
     }
   };
 
@@ -202,8 +257,8 @@ export default function CreateSubjectPage() {
     setLoading(true);
 
     try {
-      const response = await axios.post(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/subjects/create`,
+      const response = await axios.put(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/subjects/update/${id}`,
         {
           name: formData.name,
           description: formData.description || undefined,
@@ -211,43 +266,51 @@ export default function CreateSubjectPage() {
           category: formData.category,
           order: formData.order,
           difficultyLevel: formData.difficultyLevel,
-          examMapping: formData.examMapping.filter(e => e.weightage > 0 || e.important)
+          examMapping: formData.examMapping.filter(e => e.weightage > 0 || e.important),
+          isActive: formData.isActive
         },
         {
           headers: { Authorization: `Bearer ${token}` }
         }
       );
 
-      showNotification("success", "Subject created successfully!");
+      showNotification("success", "Subject updated successfully!");
 
       setTimeout(() => {
-        setFormData({
-          name: "",
-          description: "",
-          imageUrl: "",
-          category: "",
-          order: 0,
-          difficultyLevel: "Beginner",
-          examMapping: []
-        });
-        setSelectedExams([]);
-        setImage(null);
-        setUploadedUrl("");
-        setLoading(false);
-
-        // Redirect after 2 seconds
-        setTimeout(() => {
-          router.push("/admin/subjects");
-        }, 1500);
-      }, 2000);
+        router.push("/admin/subjects");
+      }, 1500);
 
     } catch (error) {
-      console.error("Error creating subject:", error);
+      console.error("Error updating subject:", error);
       showNotification(
         "error",
-        error.response?.data?.message || "Failed to create subject"
+        error.response?.data?.message || "Failed to update subject"
       );
       setLoading(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await axios.delete(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/subjects/delete/${id}`,
+        {
+          headers: { Authorization: `Bearer ${token}` }
+        }
+      );
+      
+      showNotification("success", "Subject deleted successfully!");
+      
+      setTimeout(() => {
+        router.push("/admin/subjects");
+      }, 1500);
+      
+    } catch (error) {
+      console.error("Error deleting subject:", error);
+      showNotification("error", error.response?.data?.message || "Failed to delete subject");
+      setShowDeleteModal(false);
+      setDeleting(false);
     }
   };
 
@@ -260,6 +323,17 @@ export default function CreateSubjectPage() {
     const category = categories.find(c => c._id === formData.category);
     return category ? category.colorCode : "#6366F1";
   };
+
+  if (fetchingData) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 flex items-center justify-center">
+        <div className="text-center">
+          <Loader className="animate-spin mx-auto mb-4 text-purple-600" size={48} />
+          <p className="text-gray-600 dark:text-gray-400">Loading subject data...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 py-8">
@@ -278,22 +352,23 @@ export default function CreateSubjectPage() {
             <div>
               <div className="flex items-center space-x-3 mb-2">
                 <div className="bg-gradient-to-r from-indigo-500 to-purple-500 p-2 rounded-xl">
-                  <BookOpen className="text-white" size={28} />
+                  <Edit3 className="text-white" size={28} />
                 </div>
                 <h1 className="text-4xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-                  Create New Subject
+                  Edit Subject
                 </h1>
               </div>
               <p className="text-gray-600 dark:text-gray-400 ml-14">
-                Add a new subject under a category to organize your question bank
+                Update subject details and configuration
               </p>
             </div>
-            <div className="bg-gradient-to-r from-green-500 to-emerald-500 px-4 py-2 rounded-lg shadow-sm">
-              <p className="text-white text-sm font-medium flex items-center space-x-2">
-                <Sparkles size={16} />
-                <span>Admin Action</span>
-              </p>
-            </div>
+            <button
+              onClick={() => setShowDeleteModal(true)}
+              className="bg-red-500 hover:bg-red-600 px-4 py-2 rounded-lg shadow-sm transition flex items-center space-x-2"
+            >
+              <Trash2 size={16} className="text-white" />
+              <span className="text-white text-sm font-medium">Delete Subject</span>
+            </button>
           </div>
         </div>
 
@@ -318,6 +393,16 @@ export default function CreateSubjectPage() {
           </div>
         )}
 
+        {/* Status Banner */}
+        {formData.isActive === false && (
+          <div className="mb-6 p-4 bg-yellow-100 dark:bg-yellow-900/30 rounded-xl border border-yellow-200 dark:border-yellow-800 flex items-center space-x-3">
+            <AlertCircle size={20} className="text-yellow-600 dark:text-yellow-400" />
+            <span className="text-yellow-700 dark:text-yellow-300">
+              This subject is currently inactive. Students cannot see or access it.
+            </span>
+          </div>
+        )}
+
         {/* Form Card */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
           <div className="bg-gradient-to-r from-indigo-500 to-purple-500 px-6 py-4">
@@ -328,6 +413,29 @@ export default function CreateSubjectPage() {
           </div>
 
           <form onSubmit={handleSubmit} className="p-6 space-y-6">
+            {/* Status Toggle */}
+            <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl">
+              <div>
+                <h3 className="font-semibold text-gray-900 dark:text-white">Subject Status</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Control whether this subject is visible to students
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setFormData(prev => ({ ...prev, isActive: !prev.isActive }))}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 ${
+                  formData.isActive ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    formData.isActive ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+
             {/* Category Selection */}
             <div className="space-y-2">
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
@@ -357,7 +465,7 @@ export default function CreateSubjectPage() {
               </div>
               {formData.category && (
                 <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Subject will be grouped under: <span className="font-semibold" style={{ color: getSelectedCategoryColor() }}>{getSelectedCategoryName()}</span>
+                  Subject is grouped under: <span className="font-semibold" style={{ color: getSelectedCategoryColor() }}>{getSelectedCategoryName()}</span>
                 </p>
               )}
             </div>
@@ -376,7 +484,6 @@ export default function CreateSubjectPage() {
                   onChange={handleInputChange}
                   className="w-full pl-10 pr-4 py-3 border-2 border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition"
                   placeholder="e.g., Arithmetic, Algebra, Geometry"
-                  autoFocus
                 />
               </div>
               <p className="text-xs text-gray-500 dark:text-gray-400">
@@ -656,6 +763,11 @@ export default function CreateSubjectPage() {
                           {selectedExams.length} exam(s)
                         </span>
                       )}
+                      {!formData.isActive && (
+                        <span className="text-xs bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300 px-2 py-0.5 rounded-full">
+                          Inactive
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -679,12 +791,12 @@ export default function CreateSubjectPage() {
                 {loading ? (
                   <>
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                    <span>Creating...</span>
+                    <span>Updating...</span>
                   </>
                 ) : (
                   <>
                     <Save size={18} />
-                    <span>Create Subject</span>
+                    <span>Update Subject</span>
                   </>
                 )}
               </button>
@@ -702,20 +814,64 @@ export default function CreateSubjectPage() {
             </div>
             <div>
               <h4 className="text-sm font-semibold text-blue-900 dark:text-blue-300 mb-1">
-                Tips for creating effective subjects
+                Editing Tips
               </h4>
               <ul className="text-xs text-blue-800 dark:text-blue-400 space-y-1">
-                <li>• Select the appropriate category to organize subjects properly</li>
-                <li>• Use clear, concise names that reflect the subject matter</li>
-                <li>• Add detailed descriptions to help students understand what they'll learn</li>
-                <li>• Set difficulty level to guide students appropriately</li>
-                <li>• Configure exam mapping to track subject importance for different exams</li>
-                <li>• You can always edit subjects later from the subjects list</li>
+                <li>• Changes to category may affect how subjects are grouped in the UI</li>
+                <li>• Inactive subjects won't appear in student-facing views</li>
+                <li>• Exam mapping helps track subject importance for different competitive exams</li>
+                <li>• Display order determines subject position within its category</li>
               </ul>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl max-w-md w-full p-6 animate-slide-down">
+            <div className="flex items-center space-x-3 mb-4">
+              <div className="bg-red-100 dark:bg-red-900/30 p-2 rounded-full">
+                <Trash2 className="text-red-600 dark:text-red-400" size={24} />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white">Delete Subject</h3>
+            </div>
+            
+            <p className="text-gray-600 dark:text-gray-400 mb-6">
+              Are you sure you want to delete <span className="font-semibold text-gray-900 dark:text-white">{formData.name}</span>? 
+              This action cannot be undone and will remove all associated topics and questions.
+            </p>
+            
+            <div className="flex space-x-3">
+              <button
+                onClick={() => setShowDeleteModal(false)}
+                className="flex-1 px-4 py-2 border-2 border-gray-300 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition font-medium"
+                disabled={deleting}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="flex-1 px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-xl font-medium transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+              >
+                {deleting ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 size={16} />
+                    <span>Delete Permanently</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <style jsx>{`
         @keyframes slide-down {

@@ -159,9 +159,9 @@ export default function AdminDashboard() {
   const quickActions = [
     { label: "Manage Subjects", icon: BookOpen, path: "/admin/subjects", color: "emerald" },
     { label: "Manage Topics", icon: FolderTree, path: "/admin/topics", color: "amber" },
+    { label: "Create Category", icon: FolderTree, path: "/admin/categories", color: "gray" },
     { label: "View Analytics", icon: BarChart3, path: "/admin/analytics", color: "purple" },
     { label: "User Management", icon: Users, path: "/admin/users", color: "blue" },
-    { label: "Settings", icon: Settings, path: "/admin/settings", color: "gray" },
   ];
 
   const StatCard = ({ title, value, icon: Icon, color, change }) => (

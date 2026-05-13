@@ -59,7 +59,7 @@ export default function TestDetails() {
 
   const handleStart = async () => {
     if (!checked) return;
-
+  
     setLoading(true);
     
     if (attemptInfo.action === "resume") {
@@ -73,32 +73,62 @@ export default function TestDetails() {
           `/user/test/${testId}/attempt/${attemptInfo.activeAttemptId}?agreed=${checked}`
         );
       }
+      setLoading(false);
       return;
     }
-
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/user/tests/${testId}/start`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem("token")}`
+  
+    try {
+      // 🔥 Step 1: Get device info and IP
+      const deviceRes = await fetch(`/api/device`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json"
+        }
+      });
+  
+      if (!deviceRes.ok) {
+        throw new Error("Failed to get device info");
       }
-    });
-
-    const data = await res.json();
-
-    if (res.ok) {
-      // Conditional redirect based on test type
-      if (test.hasSections) {
-        router.push(
-          `/user/sectional/${testId}/attempt/${data?.attemptId}?agreed=${checked}`
-        );
+  
+      const deviceData = await deviceRes.json();
+      
+      // 🔥 Step 2: Start test with device info
+      const startRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/user/tests/${testId}/start`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${localStorage.getItem("token")}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          ipAddress: deviceData.ip,
+          deviceInfo: deviceData.deviceInfo
+        })
+      });
+  
+      const data = await startRes.json();
+  
+      if (startRes.ok) {
+        // Conditional redirect based on test type
+        if (test.hasSections) {
+          router.push(
+            `/user/sectional/${testId}/attempt/${data?.attemptId}?agreed=${checked}`
+          );
+        } else {
+          router.push(
+            `/user/test/${testId}/attempt/${data?.attemptId}?agreed=${checked}`
+          );
+        }
       } else {
-        router.push(
-          `/user/test/${testId}/attempt/${data?.attemptId}?agreed=${checked}`
-        );
+        // Handle error
+        console.error("Failed to start test:", data);
+        // Show error message to user
       }
+    } catch (error) {
+      console.error("Error in handleStart:", error);
+      // Show error message to user
+    } finally {
+      setLoading(false);
     }
-    
-    setLoading(false);
   };
 
   const getButtonText = () => {

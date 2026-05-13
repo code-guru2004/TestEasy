@@ -17,7 +17,7 @@ import {
   ChevronDown,
   ChevronUp,
   AlertCircle,
-  Target,
+
   Zap,
   Users,
   PieChart,
@@ -26,8 +26,21 @@ import {
   Crown,
   Trophy,
   Globe,
-  Layers
+  Layers,
+  Eye,
+  Laptop,
+  Smartphone,
+  Tablet,
+  Monitor,
+ 
+  X,
+  TargetIcon
 } from "lucide-react";
+import { BsBrowserChrome,BsBrowserFirefox, BsBrowserSafari, BsBrowserEdge  } from "react-icons/bs";
+
+import { FaWindows } from "react-icons/fa";
+import { FaApple, FaLinux,FaAndroid   } from "react-icons/fa";
+
 
 export default function TestResultPage() {
   const { testId } = useParams();
@@ -43,6 +56,8 @@ export default function TestResultPage() {
   const [answerFilter, setAnswerFilter] = useState("all");
   const [expandedAnswers, setExpandedAnswers] = useState({});
   const [selectedLanguage, setSelectedLanguage] = useState("en");
+  const [showDeviceInfo, setShowDeviceInfo] = useState(false);
+  const [deviceInfo, setDeviceInfo] = useState(null);
 
   const languages = [
     { code: "en", name: "English", flag: "🇬🇧" },
@@ -101,7 +116,7 @@ export default function TestResultPage() {
         }
       );
       const data = await res.json();
-      
+     // console.log("Fetched result data:", data);
       if (data) {
         // Ensure data structure is consistent
         if (data.hasSections === undefined) {
@@ -116,6 +131,11 @@ export default function TestResultPage() {
             totalQuestions: data.totalQuestions || 0,
             attemptedAt: new Date().toISOString()
           };
+        }
+        
+        // Extract device info from response
+        if (data.deviceInfo) {
+          setDeviceInfo(data.deviceInfo);
         }
       }
       
@@ -291,6 +311,37 @@ export default function TestResultPage() {
 
   const sectionStats = getSectionStats();
 
+  // Helper function to get device icon
+  const getDeviceIcon = () => {
+    if (!deviceInfo?.deviceDetails) return <Laptop className="w-12 h-12 text-gray-400" />;
+    
+    const deviceType = deviceInfo.deviceDetails.deviceType?.toLowerCase();
+    if (deviceType === 'mobile') return <Smartphone className="w-12 h-12 text-blue-500" />;
+    if (deviceType === 'tablet') return <Tablet className="w-12 h-12 text-green-500" />;
+    return <Monitor className="w-12 h-12 text-purple-500" />;
+  };
+
+  // Helper function to get browser icon
+  const getBrowserIcon = () => {
+    const browser = deviceInfo?.deviceDetails?.browser?.toLowerCase();
+    if (browser?.includes('chrome')) return <BsBrowserChrome className="w-5 h-5 text-green-600" />;
+    if (browser?.includes('firefox')) return <BsBrowserFirefox className="w-5 h-5 text-orange-600" />;
+    if (browser?.includes('safari')) return <BsBrowserSafari className="w-5 h-5 text-gray-600" />;
+    if (browser?.includes('edge')) return <BsBrowserEdge className="w-5 h-5 text-blue-600" />;
+    return <Globe className="w-5 h-5 text-gray-500" />;
+  };
+
+  // Helper function to get OS icon
+  const getOsIcon = () => {
+    const os = deviceInfo?.deviceDetails?.os?.toLowerCase();
+    if (os?.includes('windows')) return <FaWindows className="w-5 h-5 text-blue-600" />;
+    if (os?.includes('mac')) return <FaApple  className="w-5 h-5 text-gray-600" />;
+    if (os?.includes('linux')) return <FaLinux className="w-5 h-5 text-orange-600" />;
+    if (os?.includes('android')) return <FaAndroid  className="w-5 h-5 text-green-600" />;
+    if (os?.includes('ios')) return <FaApple  className="w-5 h-5 text-gray-600" />;
+    return <Globe className="w-5 h-5 text-gray-500" />;
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
@@ -327,6 +378,118 @@ export default function TestResultPage() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <div className="max-w-6xl mx-auto px-4 py-8">
+        {/* Device Info Dialog */}
+        {showDeviceInfo && deviceInfo && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowDeviceInfo(false)}>
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+              <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-4 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Laptop className="w-5 h-5 text-blue-600" />
+                  <h2 className="text-lg font-semibold text-gray-800 dark:text-white">Device Information</h2>
+                </div>
+                <button
+                  onClick={() => setShowDeviceInfo(false)}
+                  className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition"
+                >
+                  <X className="w-5 h-5 text-gray-500" />
+                </button>
+              </div>
+              
+              <div className="p-6 space-y-6">
+                {/* Device Icon and Summary */}
+                <div className="flex items-center justify-center">
+                  <div className="text-center">
+                    {getDeviceIcon()}
+                    <p className="mt-2 text-sm font-medium text-gray-700 dark:text-gray-300 capitalize">
+                      {deviceInfo.deviceDetails?.deviceType || "Unknown Device"}
+                    </p>
+                  </div>
+                </div>
+
+                {/* IP Address */}
+                <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Globe className="w-4 h-4 text-blue-600" />
+                    <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">IP Address</h3>
+                  </div>
+                  <p className="text-gray-800 dark:text-white font-mono text-sm">{deviceInfo.ipAddress || "Not available"}</p>
+                </div>
+
+                {/* Browser Information */}
+                <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    {getBrowserIcon()}
+                    <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Browser</h3>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-sm text-gray-500 dark:text-gray-400">Name:</span>
+                      <span className="text-sm text-gray-800 dark:text-white">{deviceInfo.deviceDetails?.browser || "Unknown"}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-gray-500 dark:text-gray-400">Version:</span>
+                      <span className="text-sm text-gray-800 dark:text-white">{deviceInfo.deviceDetails?.browserVersion || "Unknown"}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Operating System */}
+                <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    {getOsIcon()}
+                    <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Operating System</h3>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-sm text-gray-500 dark:text-gray-400">OS:</span>
+                      <span className="text-sm text-gray-800 dark:text-white">{deviceInfo.deviceDetails?.os || "Unknown"}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-gray-500 dark:text-gray-400">Version:</span>
+                      <span className="text-sm text-gray-800 dark:text-white">{deviceInfo.deviceDetails?.osVersion || "Unknown"}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Device Details */}
+                <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Monitor className="w-4 h-4 text-purple-600" />
+                    <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Device Details</h3>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-sm text-gray-500 dark:text-gray-400">Type:</span>
+                      <span className="text-sm text-gray-800 dark:text-white capitalize">{deviceInfo.deviceDetails?.deviceType || "Unknown"}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-gray-500 dark:text-gray-400">Brand:</span>
+                      <span className="text-sm text-gray-800 dark:text-white">{deviceInfo.deviceDetails?.brand || "Unknown"}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-gray-500 dark:text-gray-400">Model:</span>
+                      <span className="text-sm text-gray-800 dark:text-white">{deviceInfo.deviceDetails?.model || "Unknown"}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* User Agent */}
+                {deviceInfo.userAgent && (
+                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <FileText className="w-4 h-4 text-gray-600" />
+                      <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">User Agent</h3>
+                    </div>
+                    <p className="text-xs text-gray-600 dark:text-gray-400 break-words font-mono">
+                      {deviceInfo.userAgent}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Header */}
         <div className="mb-8">
           <div className="flex items-center justify-between flex-wrap gap-4">
@@ -338,19 +501,32 @@ export default function TestResultPage() {
               Back to Dashboard
             </button>
             
-            <div className="flex items-center gap-2 px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800">
-              <Globe size={16} className="text-gray-500" />
-              <select
-                value={selectedLanguage}
-                onChange={(e) => setSelectedLanguage(e.target.value)}
-                className="bg-transparent text-gray-700 dark:text-gray-300 text-sm focus:outline-none cursor-pointer"
-              >
-                {languages.map(lang => (
-                  <option key={lang.code} value={lang.code}>
-                    {lang.flag} {lang.name}
-                  </option>
-                ))}
-              </select>
+            <div className="flex items-center gap-2">
+              {/* Device Info Button */}
+              {deviceInfo && (
+                <button
+                  onClick={() => setShowDeviceInfo(true)}
+                  className="flex items-center gap-2 px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition text-gray-700 dark:text-gray-300"
+                >
+                  <Eye size={16} />
+                  Device Info
+                </button>
+              )}
+              
+              <div className="flex items-center gap-2 px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800">
+                <Globe size={16} className="text-gray-500" />
+                <select
+                  value={selectedLanguage}
+                  onChange={(e) => setSelectedLanguage(e.target.value)}
+                  className="bg-transparent text-gray-700 dark:text-gray-300 text-sm focus:outline-none cursor-pointer"
+                >
+                  {languages.map(lang => (
+                    <option key={lang.code} value={lang.code}>
+                      {lang.flag} {lang.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
           
@@ -394,8 +570,8 @@ export default function TestResultPage() {
                 <p className="text-blue-100 text-sm">Here's how you performed on this test</p>
               </div>
               <div className="text-right">
-                <div className="text-4xl font-bold text-white">{score} / {totalMarks}</div>
-                <div className="text-blue-100">{percentage}%</div>
+                <div className="text-4xl font-bold text-white">{result.statistics.score} / {result.statistics.totalMarks}</div>
+                <div className="text-blue-100">{result.statistics.percentage}%</div>
               </div>
             </div>
           </div>
@@ -430,7 +606,7 @@ export default function TestResultPage() {
                 <div className="inline-flex p-3 bg-blue-100 dark:bg-blue-900/30 rounded-full mb-2">
                   <TrendingUp className="w-6 h-6 text-blue-600 dark:text-blue-400" />
                 </div>
-                <p className="text-2xl font-bold text-gray-800 dark:text-white">{percentage}%</p>
+                <p className="text-2xl font-bold text-gray-800 dark:text-white">{result.statistics.percentage}%</p>
                 <p className="text-sm text-gray-500 dark:text-gray-400">Percentage</p>
               </div>
             </div>
@@ -438,12 +614,12 @@ export default function TestResultPage() {
             <div className="mt-4">
               <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400 mb-2">
                 <span>Performance</span>
-                <span>{percentage}%</span>
+                <span>{result.statistics.accuracy}%</span>
               </div>
               <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                 <div 
                   className="h-full bg-gradient-to-r from-blue-500 to-purple-600 rounded-full transition-all duration-1000"
-                  style={{ width: `${percentage}%` }}
+                  style={{ width: `${result.statistics.accuracy}%` }}
                 />
               </div>
             </div>
@@ -539,7 +715,7 @@ export default function TestResultPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
-                    <Target className="w-5 h-5 text-gray-500" />
+                    <TargetIcon className="w-5 h-5 text-gray-500" />
                     <div>
                       <p className="text-sm text-gray-500 dark:text-gray-400">Total Questions</p>
                       <p className="font-medium text-gray-800 dark:text-white">{totalQuestions}</p>

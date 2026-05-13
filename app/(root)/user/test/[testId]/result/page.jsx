@@ -17,7 +17,7 @@ import {
   ChevronDown,
   ChevronUp,
   AlertCircle,
-  Target,
+
   Zap,
   Users,
   PieChart,
@@ -32,12 +32,16 @@ import {
   Smartphone,
   Tablet,
   Monitor,
-  Chrome,
-  Firefox,
-  Apple,
-  Windows,
-  X
+ 
+  X,
+  TargetIcon
 } from "lucide-react";
+import { BsBrowserChrome,BsBrowserFirefox, BsBrowserSafari, BsBrowserEdge  } from "react-icons/bs";
+
+import { FaWindows } from "react-icons/fa";
+import { FaApple, FaLinux,FaAndroid   } from "react-icons/fa";
+import { SiMacos } from "react-icons/si";
+
 
 export default function TestResultPage() {
   const { testId } = useParams();
@@ -307,21 +311,21 @@ export default function TestResultPage() {
   // Helper function to get browser icon
   const getBrowserIcon = () => {
     const browser = deviceInfo?.deviceDetails?.browser?.toLowerCase();
-    if (browser?.includes('chrome')) return <Chrome className="w-5 h-5 text-green-600" />;
-    if (browser?.includes('firefox')) return <Firefox className="w-5 h-5 text-orange-600" />;
-    if (browser?.includes('safari')) return <Apple className="w-5 h-5 text-gray-600" />;
-    if (browser?.includes('edge')) return <Monitor className="w-5 h-5 text-blue-600" />;
+    if (browser?.includes('chrome')) return <BsBrowserChrome className="w-5 h-5 text-green-600" />;
+    if (browser?.includes('firefox')) return <BsBrowserFirefox className="w-5 h-5 text-orange-600" />;
+    if (browser?.includes('safari')) return <BsBrowserSafari className="w-5 h-5 text-gray-600" />;
+    if (browser?.includes('edge')) return <BsBrowserEdge className="w-5 h-5 text-blue-600" />;
     return <Globe className="w-5 h-5 text-gray-500" />;
   };
 
   // Helper function to get OS icon
   const getOsIcon = () => {
     const os = deviceInfo?.deviceDetails?.os?.toLowerCase();
-    if (os?.includes('windows')) return <Windows className="w-5 h-5 text-blue-600" />;
-    if (os?.includes('mac')) return <Apple className="w-5 h-5 text-gray-600" />;
-    if (os?.includes('linux')) return <Monitor className="w-5 h-5 text-orange-600" />;
-    if (os?.includes('android')) return <Smartphone className="w-5 h-5 text-green-600" />;
-    if (os?.includes('ios')) return <Apple className="w-5 h-5 text-gray-600" />;
+    if (os?.includes('windows')) return <FaWindows className="w-5 h-5 text-blue-600" />;
+    if (os?.includes('mac')) return <SiMacos className="w-5 h-5 text-gray-600" />;
+    if (os?.includes('linux')) return <FaLinux className="w-5 h-5 text-orange-600" />;
+    if (os?.includes('android')) return <FaAndroid className="w-5 h-5 text-green-600" />;
+    if (os?.includes('ios')) return <FaApple className="w-5 h-5 text-gray-600" />;
     return <Globe className="w-5 h-5 text-gray-500" />;
   };
 
@@ -694,7 +698,7 @@ export default function TestResultPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
-                    <Target className="w-5 h-5 text-gray-500" />
+                    <TargetIcon className="w-5 h-5 text-gray-500" />
                     <div>
                       <p className="text-sm text-gray-500 dark:text-gray-400">Total Questions</p>
                       <p className="font-medium text-gray-800 dark:text-white">{totalQuestions}</p>

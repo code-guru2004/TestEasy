@@ -17,7 +17,7 @@ import {
   ChevronDown,
   ChevronUp,
   AlertCircle,
-
+  Target,
   Zap,
   Users,
   PieChart,
@@ -32,15 +32,12 @@ import {
   Smartphone,
   Tablet,
   Monitor,
- 
-  X,
-  TargetIcon
+  Chrome,
+  Firefox,
+  Apple,
+  Windows,
+  X
 } from "lucide-react";
-import { BsBrowserChrome,BsBrowserFirefox, BsBrowserSafari, BsBrowserEdge  } from "react-icons/bs";
-
-import { FaWindows } from "react-icons/fa";
-import { FaApple, FaLinux,FaAndroid   } from "react-icons/fa";
-
 
 export default function TestResultPage() {
   const { testId } = useParams();
@@ -116,23 +113,9 @@ export default function TestResultPage() {
         }
       );
       const data = await res.json();
-     // console.log("Fetched result data:", data);
+      console.log("Fetched result data:", data);
+      
       if (data) {
-        // Ensure data structure is consistent
-        if (data.hasSections === undefined) {
-          data.hasSections = data.sections && data.sections.length > 0;
-        }
-        if (!data.sections) data.sections = [];
-        if (!data.questions) data.questions = [];
-        if (!data.summary) {
-          data.summary = {
-            score: data.score || 0,
-            totalMarks: data.totalMarks || 0,
-            totalQuestions: data.totalQuestions || 0,
-            attemptedAt: new Date().toISOString()
-          };
-        }
-        
         // Extract device info from response
         if (data.deviceInfo) {
           setDeviceInfo(data.deviceInfo);
@@ -206,15 +189,35 @@ export default function TestResultPage() {
     });
   };
 
-  // FIXED: Properly extract all questions from both sectional and non-sectional responses
+  // Helper function to safely get statistics from response
+  const getStatistics = () => {
+    if (!result) return { score: 0, totalMarks: 0, correct: 0, wrong: 0, unattempted: 0, percentage: "0", accuracy: 0 };
+    
+    // Try to get from statistics object (new API)
+    if (result.statistics) {
+      return result.statistics;
+    }
+    
+    // Fallback to old structure
+    return {
+      score: result.score || 0,
+      totalMarks: result.totalMarks || 0,
+      correct: result.correctAnswers || 0,
+      wrong: result.wrongAnswers || 0,
+      unattempted: result.unattempted || 0,
+      percentage: result.percentage || "0",
+      accuracy: result.accuracy || 0
+    };
+  };
+
+  // Get all questions from response
   const getAllQuestions = () => {
     if (!result) return [];
     
-    // Handle sectional test (hasSections = true)
-    if (result.hasSections === true && result.sections && Array.isArray(result.sections) && result.sections.length > 0) {
+    // Handle sectional test
+    if (result.hasSections && result.sections && Array.isArray(result.sections)) {
       const allQuestions = [];
       result.sections.forEach((section, sectionIdx) => {
-        // Check if section has questions array
         if (section.questions && Array.isArray(section.questions)) {
           section.questions.forEach((question, questionIdx) => {
             allQuestions.push({
@@ -226,23 +229,12 @@ export default function TestResultPage() {
             });
           });
         }
-        // Also handle if section has answers array (backward compatibility)
-        else if (section.answers && Array.isArray(section.answers)) {
-          section.answers.forEach((answer, questionIdx) => {
-            allQuestions.push({
-              ...answer,
-              sectionIndex: section.sectionIndex !== undefined ? section.sectionIndex : sectionIdx,
-              sectionTitle: section.sectionTitle || `Section ${sectionIdx + 1}`,
-              sectionIdx,
-              questionIdx
-            });
-          });
-        }
       });
       return allQuestions;
-    } 
-    // Handle non-sectional test (hasSections = false or no sections)
-    else if (result.questions && Array.isArray(result.questions) && result.questions.length > 0) {
+    }
+    
+    // Handle non-sectional test
+    if (result.questions && Array.isArray(result.questions)) {
       return result.questions.map((q, idx) => ({
         ...q,
         sectionIndex: null,
@@ -255,14 +247,18 @@ export default function TestResultPage() {
     return [];
   };
 
+  const statistics = getStatistics();
   const allQuestions = getAllQuestions();
-  const hasSections = result?.hasSections === true || (result?.sections && result.sections.length > 0);
+  const hasSections = result?.hasSections === true;
   
-  // Calculate statistics
-  const correctCount = allQuestions.filter(q => q?.isCorrect === true).length || 0;
-  const wrongCount = allQuestions.filter(q => q?.isCorrect === false).length || 0;
-  const unattemptedCount = allQuestions.filter(q => !q?.selectedOption || q?.status === "unattempted").length || 0;
-  const totalQuestions = allQuestions.length || result?.totalQuestions || 0;
+  // Calculate statistics from questions if not provided
+  const correctCount = statistics.correct || allQuestions.filter(q => q?.isCorrect === true).length || 0;
+  const wrongCount = statistics.wrong || allQuestions.filter(q => q?.isCorrect === false).length || 0;
+  const unattemptedCount = statistics.unattempted || allQuestions.filter(q => !q?.selectedOption || q?.status === "unattempted").length || 0;
+  const totalQuestions = allQuestions.length || result?.totalQuestions || statistics.totalQuestions || 0;
+  const score = statistics.score || 0;
+  const totalMarks = statistics.totalMarks || 0;
+  const percentage = calculatePercentage(score, totalMarks);
   
   const correctPercentage = totalQuestions ? (correctCount / totalQuestions) * 100 : 0;
   const wrongPercentage = totalQuestions ? (wrongCount / totalQuestions) * 100 : 0;
@@ -279,34 +275,21 @@ export default function TestResultPage() {
 
   const filteredAnswers = getFilteredAnswers();
 
-  // FIXED: Properly calculate section stats from sectional test data
+  // Get section stats for sectional tests
   const getSectionStats = () => {
-    if (!hasSections || !result?.sections || !Array.isArray(result.sections) || result.sections.length === 0) return [];
+    if (!hasSections || !result?.sections || !Array.isArray(result.sections)) return [];
     
-    return result.sections.map(section => {
-      const sectionQuestions = section.questions || section.answers || [];
-      const correct = sectionQuestions.filter(q => q.isCorrect === true).length;
-      const wrong = sectionQuestions.filter(q => q.isCorrect === false).length;
-      const unattempted = sectionQuestions.filter(q => !q.selectedOption || q.status === "unattempted").length;
-      const score = sectionQuestions.reduce((sum, q) => sum + (q.marksObtained || 0), 0);
-      // Calculate total marks based on questions in section
-      const totalMarks = sectionQuestions.reduce((sum, q) => {
-        // Assuming each question has marksObtained property or default to 2
-        return sum + (q.marks || 2);
-      }, 0);
-      
-      return {
-        title: section.sectionTitle || `Section ${(section.sectionIndex !== undefined ? section.sectionIndex : 0) + 1}`,
-        index: section.sectionIndex !== undefined ? section.sectionIndex : 0,
-        correct,
-        wrong,
-        unattempted,
-        score,
-        totalMarks: totalMarks || section.totalMarks || (sectionQuestions.length * 2),
-        totalQuestions: sectionQuestions.length,
-        percentage: totalMarks ? ((score / totalMarks) * 100).toFixed(2) : 0
-      };
-    });
+    return result.sections.map(section => ({
+      title: section.sectionTitle || `Section ${(section.sectionIndex !== undefined ? section.sectionIndex : 0) + 1}`,
+      index: section.sectionIndex !== undefined ? section.sectionIndex : 0,
+      correct: section.sectionStatistics?.correct || 0,
+      wrong: section.sectionStatistics?.wrong || 0,
+      unattempted: section.sectionStatistics?.unattempted || 0,
+      score: section.score || 0,
+      totalMarks: section.totalMarks || 0,
+      totalQuestions: section.totalQuestions || 0,
+      percentage: section.sectionStatistics?.percentage || 0
+    }));
   };
 
   const sectionStats = getSectionStats();
@@ -324,21 +307,21 @@ export default function TestResultPage() {
   // Helper function to get browser icon
   const getBrowserIcon = () => {
     const browser = deviceInfo?.deviceDetails?.browser?.toLowerCase();
-    if (browser?.includes('chrome')) return <BsBrowserChrome className="w-5 h-5 text-green-600" />;
-    if (browser?.includes('firefox')) return <BsBrowserFirefox className="w-5 h-5 text-orange-600" />;
-    if (browser?.includes('safari')) return <BsBrowserSafari className="w-5 h-5 text-gray-600" />;
-    if (browser?.includes('edge')) return <BsBrowserEdge className="w-5 h-5 text-blue-600" />;
+    if (browser?.includes('chrome')) return <Chrome className="w-5 h-5 text-green-600" />;
+    if (browser?.includes('firefox')) return <Firefox className="w-5 h-5 text-orange-600" />;
+    if (browser?.includes('safari')) return <Apple className="w-5 h-5 text-gray-600" />;
+    if (browser?.includes('edge')) return <Monitor className="w-5 h-5 text-blue-600" />;
     return <Globe className="w-5 h-5 text-gray-500" />;
   };
 
   // Helper function to get OS icon
   const getOsIcon = () => {
     const os = deviceInfo?.deviceDetails?.os?.toLowerCase();
-    if (os?.includes('windows')) return <FaWindows className="w-5 h-5 text-blue-600" />;
-    if (os?.includes('mac')) return <FaApple  className="w-5 h-5 text-gray-600" />;
-    if (os?.includes('linux')) return <FaLinux className="w-5 h-5 text-orange-600" />;
-    if (os?.includes('android')) return <FaAndroid  className="w-5 h-5 text-green-600" />;
-    if (os?.includes('ios')) return <FaApple  className="w-5 h-5 text-gray-600" />;
+    if (os?.includes('windows')) return <Windows className="w-5 h-5 text-blue-600" />;
+    if (os?.includes('mac')) return <Apple className="w-5 h-5 text-gray-600" />;
+    if (os?.includes('linux')) return <Monitor className="w-5 h-5 text-orange-600" />;
+    if (os?.includes('android')) return <Smartphone className="w-5 h-5 text-green-600" />;
+    if (os?.includes('ios')) return <Apple className="w-5 h-5 text-gray-600" />;
     return <Globe className="w-5 h-5 text-gray-500" />;
   };
 
@@ -370,10 +353,6 @@ export default function TestResultPage() {
       </div>
     );
   }
-
-  const score = result.summary?.score || result.score || 0;
-  const totalMarks = result.summary?.totalMarks || result.totalMarks || 0;
-  const percentage = calculatePercentage(score, totalMarks);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -540,7 +519,7 @@ export default function TestResultPage() {
                   Test Results
                 </h1>
                 <p className="text-gray-600 dark:text-gray-300 mt-1">
-                  {testDetails?.title || "Assessment"} • Completed on {formatDate(result.summary?.attemptedAt || new Date())}
+                  {testDetails?.title || "Assessment"} • Completed on {formatDate(result.timeInfo?.submittedAt || result.submittedAt || new Date())}
                 </p>
                 {hasSections && (
                   <span className="inline-flex items-center gap-1 mt-1 text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 px-2 py-0.5 rounded-full">
@@ -570,8 +549,8 @@ export default function TestResultPage() {
                 <p className="text-blue-100 text-sm">Here's how you performed on this test</p>
               </div>
               <div className="text-right">
-                <div className="text-4xl font-bold text-white">{result.statistics.score} / {result.statistics.totalMarks}</div>
-                <div className="text-blue-100">{result.statistics.percentage}%</div>
+                <div className="text-4xl font-bold text-white">{score} / {totalMarks}</div>
+                <div className="text-blue-100">{percentage}%</div>
               </div>
             </div>
           </div>
@@ -606,7 +585,7 @@ export default function TestResultPage() {
                 <div className="inline-flex p-3 bg-blue-100 dark:bg-blue-900/30 rounded-full mb-2">
                   <TrendingUp className="w-6 h-6 text-blue-600 dark:text-blue-400" />
                 </div>
-                <p className="text-2xl font-bold text-gray-800 dark:text-white">{result.statistics.percentage}%</p>
+                <p className="text-2xl font-bold text-gray-800 dark:text-white">{percentage}%</p>
                 <p className="text-sm text-gray-500 dark:text-gray-400">Percentage</p>
               </div>
             </div>
@@ -614,12 +593,12 @@ export default function TestResultPage() {
             <div className="mt-4">
               <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400 mb-2">
                 <span>Performance</span>
-                <span>{result.statistics.accuracy}%</span>
+                <span>{percentage}%</span>
               </div>
               <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                 <div 
                   className="h-full bg-gradient-to-r from-blue-500 to-purple-600 rounded-full transition-all duration-1000"
-                  style={{ width: `${result.statistics.accuracy}%` }}
+                  style={{ width: `${percentage}%` }}
                 />
               </div>
             </div>
@@ -711,11 +690,11 @@ export default function TestResultPage() {
                     <Clock className="w-5 h-5 text-gray-500" />
                     <div>
                       <p className="text-sm text-gray-500 dark:text-gray-400">Duration</p>
-                      <p className="font-medium text-gray-800 dark:text-white">{testDetails?.duration} minutes</p>
+                      <p className="font-medium text-gray-800 dark:text-white">{testDetails?.duration || result.timeInfo?.duration || "N/A"} minutes</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
-                    <TargetIcon className="w-5 h-5 text-gray-500" />
+                    <Target className="w-5 h-5 text-gray-500" />
                     <div>
                       <p className="text-sm text-gray-500 dark:text-gray-400">Total Questions</p>
                       <p className="font-medium text-gray-800 dark:text-white">{totalQuestions}</p>
@@ -725,14 +704,14 @@ export default function TestResultPage() {
                     <Calendar className="w-5 h-5 text-gray-500" />
                     <div>
                       <p className="text-sm text-gray-500 dark:text-gray-400">Started At</p>
-                      <p className="font-medium text-gray-800 dark:text-white">{formatDate(testDetails?.startTime)}</p>
+                      <p className="font-medium text-gray-800 dark:text-white">{formatDate(result.timeInfo?.startedAt || result.startedAt)}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
                     <Calendar className="w-5 h-5 text-gray-500" />
                     <div>
                       <p className="text-sm text-gray-500 dark:text-gray-400">Submitted At</p>
-                      <p className="font-medium text-gray-800 dark:text-white">{formatDate(result.summary?.attemptedAt || new Date())}</p>
+                      <p className="font-medium text-gray-800 dark:text-white">{formatDate(result.timeInfo?.submittedAt || result.submittedAt)}</p>
                     </div>
                   </div>
                 </div>

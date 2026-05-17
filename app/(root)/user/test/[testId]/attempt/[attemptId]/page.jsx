@@ -16,9 +16,14 @@ import {
   Menu,
   Globe,
   Wifi,
-  WifiOff
+  WifiOff,
+  PauseCircle,
+  TriangleAlert,
+  Link
 } from "lucide-react";
 import Image from "next/image";
+import FaceCameraMonitor from "@/components/camera/FaceCameraMonitor";
+import ProctoringCamera from "../../../../../../../components/camera/ProctoringCamera";
 
 export default function AttemptPage() {
 
@@ -53,6 +58,11 @@ export default function AttemptPage() {
   const pendingSaveRef = useRef(null);
   const currentQuestionIndexRef = useRef(0);
   const hasNavigatedRef = useRef(false);
+
+  // Add state for test pause on violation
+  const [isPausedByViolation, setIsPausedByViolation] = useState(false);
+  const [violationMessage, setViolationMessage] = useState("");
+  const [isCameraPermissionDenied, setIsCameraPermissionDenied] = useState(false);
 
   // Languages configuration
   const languages = [
@@ -100,14 +110,14 @@ export default function AttemptPage() {
   // Save answer to DB (non-blocking)
   const saveAnswerToDB = async (questionId, selectedOptionId, isMarkedForReview, currentQuestionIndex, isSilent = false) => {
     if (!attemptId) return false;
-    
+
     // Store the save operation in ref to prevent race conditions
     const saveOperation = async () => {
       // Don't show saving indicator for silent saves (during navigation)
       if (!isSilent) {
         setSavingAnswer(true);
       }
-      
+
       try {
         const res = await fetch(
           `${process.env.NEXT_PUBLIC_API_URL}/api/user/attempts/${attemptId}/answer`,
@@ -152,13 +162,13 @@ export default function AttemptPage() {
     // Store the promise to handle sequential saves properly
     const previousSave = pendingSaveRef.current;
     const currentSave = saveOperation();
-    
+
     if (previousSave) {
       pendingSaveRef.current = previousSave.then(() => currentSave);
     } else {
       pendingSaveRef.current = currentSave;
     }
-    
+
     return pendingSaveRef.current;
   };
 
@@ -181,7 +191,7 @@ export default function AttemptPage() {
       );
 
       const data = await res.json();
-      
+
       if (!isMountedRef.current) return;
 
       // Check if test is completed
@@ -189,10 +199,10 @@ export default function AttemptPage() {
         router.push(`/user/test/${testId}/result?attemptId=${attemptId}`);
         return;
       }
-      
+
       setUserEmail(data.user?.email || "");
       setUserId(data.user?.id || "");
-      
+
       // ONLY update current question index on initial load OR when resuming from pause
       if (isInitial || isPaused) {
         const savedIndex = data.attempt.currentQuestionIndex || 0;
@@ -202,24 +212,24 @@ export default function AttemptPage() {
           currentQuestionIndexRef.current = savedIndex;
         }
       }
-      
+
       setTimeLeft(data.attempt.remainingTime);
       setIsPaused(data.attempt.status === "paused");
-      
+
       // Process questions - merge saved answers with current state
       const processedQuestions = data.questions.map((q, idx) => {
         const existingQuestion = questions[idx];
         return {
           ...q,
           // Preserve local changes if they exist and are more recent
-          selectedOptionId: existingQuestion?.selectedOptionId !== undefined && !isInitial 
-            ? existingQuestion.selectedOptionId 
+          selectedOptionId: existingQuestion?.selectedOptionId !== undefined && !isInitial
+            ? existingQuestion.selectedOptionId
             : (q.selectedOption || null)
         };
       });
-      
+
       setQuestions(processedQuestions);
-      
+
       // Initialize marked for review
       const marked = processedQuestions
         .filter(q => q.isMarkedForReview)
@@ -228,7 +238,7 @@ export default function AttemptPage() {
 
       setSyncStatus("synced");
       setIsOnline(true);
-      
+
       // Reset navigation flag after sync
       if (!isInitial) {
         setTimeout(() => {
@@ -248,7 +258,7 @@ export default function AttemptPage() {
       syncIntervalRef.current = setInterval(() => {
         fetchAttempt(false, false); // isInitial = false, won't update current question
       }, 10000);
-      
+
       return () => {
         if (syncIntervalRef.current) clearInterval(syncIntervalRef.current);
       };
@@ -268,7 +278,7 @@ export default function AttemptPage() {
           return prev - 1;
         });
       }, 1000);
-      
+
       return () => {
         if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
       };
@@ -284,6 +294,138 @@ export default function AttemptPage() {
     }
   }, [attemptId]);
 
+
+  // tab switch and window focus/blur handling for auto pause/resume
+  // TAB SWITCH / WINDOW FOCUS SECURITY
+useEffect(() => {
+  let isViolationTriggered = false;
+
+  const handleTabViolation = async (reason) => {
+    // prevent multiple triggers
+    if (isViolationTriggered) return;
+
+    // don't trigger if already paused/submitting
+    if (isPaused || submitting) return;
+
+    isViolationTriggered = true;
+
+    setViolationMessage(reason);
+    setIsPausedByViolation(true);
+
+    try {
+      await pauseTest();
+    } catch (err) {
+      console.error("Pause error:", err);
+    }
+
+    // reset lock after small delay
+    setTimeout(() => {
+      isViolationTriggered = false;
+    }, 2000);
+  };
+
+  // Detect hidden tab
+  const handleVisibilityChange = () => {
+    if (document.hidden) {
+      handleTabViolation(
+        "Tab switching detected. Please stay on the test screen."
+      );
+    }
+  };
+
+  // Detect window blur
+  const handleWindowBlur = () => {
+    // small timeout avoids false positives
+    setTimeout(() => {
+      if (!document.hasFocus()) {
+        handleTabViolation(
+          "Window focus lost. Please stay on the test screen."
+        );
+      }
+    }, 100);
+  };
+
+  // Optional: prevent copy shortcuts
+  const handleKeyDown = (e) => {
+    // ALT + TAB
+    if (e.altKey && e.key === "Tab") {
+      e.preventDefault();
+
+      handleTabViolation(
+        "Application switching detected."
+      );
+    }
+
+    // WINDOWS KEY
+    if (e.key === "Meta") {
+      handleTabViolation(
+        "System key usage detected."
+      );
+    }
+
+    // CTRL+T / CTRL+N / CTRL+W
+    if (
+      e.ctrlKey &&
+      ["t", "n", "w"].includes(e.key.toLowerCase())
+    ) {
+      e.preventDefault();
+
+      handleTabViolation(
+        "Browser shortcut detected."
+      );
+    }
+  };
+
+  // Mobile app switching support
+  const handlePageHide = () => {
+    handleTabViolation(
+      "App switching detected."
+    );
+  };
+
+  document.addEventListener(
+    "visibilitychange",
+    handleVisibilityChange
+  );
+
+  window.addEventListener(
+    "blur",
+    handleWindowBlur
+  );
+
+  window.addEventListener(
+    "pagehide",
+    handlePageHide
+  );
+
+  window.addEventListener(
+    "keydown",
+    handleKeyDown
+  );
+
+  return () => {
+    document.removeEventListener(
+      "visibilitychange",
+      handleVisibilityChange
+    );
+
+    window.removeEventListener(
+      "blur",
+      handleWindowBlur
+    );
+
+    window.removeEventListener(
+      "pagehide",
+      handlePageHide
+    );
+
+    window.removeEventListener(
+      "keydown",
+      handleKeyDown
+    );
+  };
+}, [isPaused, submitting]);
+// =====================
   const fetchTestDetails = async () => {
     try {
       const res = await fetch(
@@ -379,7 +521,7 @@ export default function AttemptPage() {
     if (current < questions.length - 1) {
       // Mark that user has navigated
       hasNavigatedRef.current = true;
-      
+
       // Save current answer before moving (silent save)
       if (attemptId && questions[current]) {
         const optionId = questions[current]?.selectedOptionId || null;
@@ -399,7 +541,7 @@ export default function AttemptPage() {
     if (current > 0) {
       // Mark that user has navigated
       hasNavigatedRef.current = true;
-      
+
       // Save current answer before moving (silent save)
       if (attemptId && questions[current]) {
         const optionId = questions[current]?.selectedOptionId || null;
@@ -418,7 +560,7 @@ export default function AttemptPage() {
   const goToQuestion = async (index) => {
     // Mark that user has navigated
     hasNavigatedRef.current = true;
-    
+
     // Save current position before moving (silent save)
     if (attemptId && questions[current]) {
       const optionId = questions[current]?.selectedOptionId || null;
@@ -442,7 +584,7 @@ export default function AttemptPage() {
     setSubmitting(true);
     if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
     if (syncIntervalRef.current) clearInterval(syncIntervalRef.current);
-    
+
     try {
       const res = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/api/user/attempts/${attemptId}/submit`,
@@ -514,6 +656,84 @@ export default function AttemptPage() {
         return "bg-red-400";
       default:
         return "bg-gray-300 dark:bg-gray-600";
+    }
+  };
+
+  // Handler for violations
+  const handleViolation = (violationType, message) => {
+    console.log(`Violation: ${violationType} - ${message}`);
+    setViolationMessage(message);
+    if(message==="Camera access denied"){
+      setIsCameraPermissionDenied(true);
+
+    }
+    // Pause the test on violation
+    if (!isPaused && !isPausedByViolation) {
+      pauseTest();
+      setIsPausedByViolation(true);
+    }
+  };
+
+  // Handler for when violation clears
+  const handleViolationClear = () => {
+    setViolationMessage("");
+    // Don't auto-resume - let user manually resume
+  };
+
+  // Modified resume function to also clear violation pause
+  const originalResumeTest = resumeTest;
+  const handleResumeTest = async () => {
+    try {
+      // CHECK CAMERA PERMISSION BEFORE RESUME
+      const permission = await navigator.permissions.query({
+        name: "camera",
+      });
+  
+      // camera blocked / denied
+      if (permission.state === "denied") {
+        setViolationMessage(
+          "Camera permission is blocked. Please allow camera access to continue."
+        );
+        setIsCameraPermissionDenied(true);
+        setIsPaused(true);
+        setIsPausedByViolation(true);
+  
+        return;
+      }
+  
+      // verify camera actually works
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+        });
+  
+        // stop temporary stream immediately
+        stream.getTracks().forEach((track) => track.stop());
+      } catch (err) {
+        setViolationMessage(
+          "Camera access is required to resume the test."
+        );
+  
+        setIsPaused(true);
+        setIsPausedByViolation(true);
+  
+        return;
+      }
+  
+      // resume test normally
+      await resumeTest();
+      setIsCameraPermissionDenied(false);
+      setIsPausedByViolation(false);
+      setViolationMessage("");
+    } catch (err) {
+      console.error("Resume camera validation error:", err);
+  
+      setViolationMessage(
+        "Unable to verify camera access."
+      );
+      setIsCameraPermissionDenied(true);
+      setIsPaused(true);
+      setIsPausedByViolation(true);
     }
   };
 
@@ -627,8 +847,13 @@ export default function AttemptPage() {
         <div className={`fixed left-0 top-16 bottom-0 w-72 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transform transition-transform duration-300 z-30 overflow-y-auto ${showSidebar ? "translate-x-0" : "-translate-x-full"} md:translate-x-0`}>
           <div className="p-4 flex-col gap-2">
             <div className="mb-4 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg cursor-not-allowed">
-              <div className="flex items-center justify-center gap-3 mb-3">
-                <Image src={"/images/person.jpg"} alt="img" width={100} height={100} />
+              <div className="flex-col items-center justify-center mb-3">
+                <ProctoringCamera
+                  onViolation={(msg) => {
+                    handleViolation("Violation Detected", msg);
+                  }}
+                  onPauseTest={pauseTest}
+                />
               </div>
               <div className="flex items-center justify-center gap-2 mb-2">
                 <h3 className="text-xs font-light text-gray-700 dark:text-gray-300">
@@ -649,7 +874,7 @@ export default function AttemptPage() {
                 <span>Remaining: {questions.length - answeredCount}</span>
               </div>
             </div>
-            
+
             {/* Question Lists grid */}
             <div className="grid grid-cols-7 gap-2">
               {questions.map((q, idx) => {
@@ -677,7 +902,7 @@ export default function AttemptPage() {
                 );
               })}
             </div>
-            
+
             {/* Color Instruction */}
             <div className="mt-5 pt-4 border-t border-gray-200 dark:border-gray-700 space-y-3 text-sm cursor-not-allowed">
               <div className="flex items-center gap-3">
@@ -741,7 +966,7 @@ export default function AttemptPage() {
                     className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition ${markedForReview.includes(currentQ._id)
                       ? "bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400"
                       : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400"
-                    }`}
+                      }`}
                   >
                     <Flag size={16} />
                     <span className="text-sm">Mark for Review</span>
@@ -757,14 +982,14 @@ export default function AttemptPage() {
                   {currentQ?.options?.map((option, idx) => {
                     const optionText = getLocalizedOptionText(option);
                     const isChecked = currentQ.selectedOptionId === option.id;
-                    
+
                     return (
                       <label
                         key={option.id || idx}
                         className={`flex items-center gap-3 p-4 border rounded-sm cursor-pointer transition-all hover:bg-gray-50 dark:hover:bg-gray-700 ${isChecked
                           ? "border-blue-500 bg-blue-50 dark:bg-purple-900/20"
                           : "border-gray-300 dark:border-gray-700"
-                        }`}
+                          }`}
                       >
                         <input
                           type="radio"
@@ -840,15 +1065,32 @@ export default function AttemptPage() {
       {isPaused && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
           <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 max-w-md text-center">
-            <div className="bg-purple-100 dark:bg-purple-900/30 p-4 rounded-full inline-flex mb-4">
-              <Pause size={32} className="text-purple-600" />
+            <div className={`p-4 rounded-full inline-flex mb-4 ${violationMessage ? "bg-red-100 dark:bg-red-900/30" : "bg-purple-100 dark:bg-purple-900/30"}`}>
+              {violationMessage ? <TriangleAlert size={32} className="text-red-600" /> : <PauseCircle size={32} className="text-purple-600" />}
             </div>
-            <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-2">Test Paused</h2>
+            <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-2">
+              {violationMessage ? "Test Paused - Violation Detected" : "Test Paused"}
+            </h2>
+            {violationMessage && (
+              <p className="text-red-600 dark:text-red-400 mb-4 text-sm">
+                {violationMessage}
+              </p>
+            )}
             <p className="text-gray-600 dark:text-gray-300 mb-6">
-              Your test has been paused. Click resume to continue where you left off.
+            {violationMessage
+  ? "Security violation detected. Please stay on the exam screen before resuming."
+  : "Your test has been paused. Click resume to continue where you left off."
+}
             </p>
+            <div className="mb-4 text-sm bg-red-300 border-2 rounded text-blue-700"> 
+              {
+                isCameraPermissionDenied && (
+                    <a href="/camera-access" target="_blank" rel="noopener noreferrer" className="bg-blue-400 underline"> 📷 How to give camera permission?</a>
+                )
+              }
+            </div>
             <button
-              onClick={resumeTest}
+              onClick={handleResumeTest}
               className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white py-3 rounded-xl font-semibold flex items-center justify-center gap-2"
             >
               <PlayCircle size={18} />

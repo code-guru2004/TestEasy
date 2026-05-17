@@ -223,7 +223,7 @@ export function SimpleEditor({ content: initialContent = "", onUpdate }: { conte
         },
       }),
       HorizontalRule,
-      TextAlign.configure({ 
+      TextAlign.configure({
         types: ["heading", "paragraph"],
         alignments: ["left", "center", "right", "justify"],
       }),
@@ -308,8 +308,8 @@ export function SimpleEditor({ content: initialContent = "", onUpdate }: { conte
           style={{
             ...(isMobile
               ? {
-                  bottom: `calc(100% - ${height - rect.y}px)`,
-                }
+                bottom: `calc(100% - ${height - rect.y}px)`,
+              }
               : {}),
           }}
         >
@@ -327,11 +327,18 @@ export function SimpleEditor({ content: initialContent = "", onUpdate }: { conte
           )}
         </Toolbar>
 
-        <EditorContent
-          editor={editor}
-          role="presentation"
+        <div
           className="simple-editor-content"
-        />
+          style={{
+            height: "calc(100vh - 80px)", // adjust based on toolbar height
+            overflowY: "auto",
+          }}
+        >
+          <EditorContent
+            editor={editor}
+            role="presentation"
+          />
+        </div>
       </EditorContext.Provider>
     </div>
   )

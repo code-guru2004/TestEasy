@@ -18,7 +18,7 @@ export async function POST(req) {
     secure: true, // true in production (HTTPS)
     sameSite: "lax",
     path: "/",
-    maxAge: 60 * 60 * 24 * 30, // ✅ 30 days in seconds
+    maxAge: 60 * 60 * 24 * 3, // ✅ 30 days in seconds
   });
 
   return response;
